@@ -6,15 +6,15 @@ sidebar_position: 1
 import PluginFileTree from '@site/src/components/PluginFileTree';
 import Admonition from '@theme/Admonition';
 
-This guide covers installing Sparrow Sync and assigning a unique ID to your server.
+This guide covers installing Sparrow Sync and configuring a unique server ID, Redis, and persistent storage.
 
 ## Supported Server Software
 
-Sparrow Sync supports the following Paper-based server software:
-
-**Paper and its forks**: Paper, Purpur, Pufferfish, Leaf, Leaves, UniverseSpigot
-
-**Folia and its forks**: Folia, Canvas, Luminol
+| Server Software | 1.21.4 ~ 1.21.7 | 1.21.8 ~ 26.1.2 | 26.2 |
+| --- | :---: | :---: | :---: |
+| Paper **and its forks** | 🕒 Planned | ✅ | ✅ |
+| Folia **and its forks** | 🕒 Planned | ✅ | ✅ |
+| Spigot | ❌ Unsupported | ❌ Unsupported | 🕒 Planned |
 
 ## Installation
 
@@ -35,7 +35,12 @@ Place the Sparrow Sync `.jar` file in your server's `plugins/` folder, then star
 
 <Admonition type="info" title="The server shuts down on the first startup">
 
-The `server-id` in `server.yml` is empty by default. On the first startup, the plugin reports the missing server ID in the console and shuts down the server. Set `server-id` as described in the next section, save the file, and start the server again.
+The `server-id` in `server.yml` is empty by default. On the first startup, the plugin reports the missing server ID in the console and shuts down the server.
+
+Before starting the server again, complete both steps below:
+
+1. Set a unique `server-id` for this server in `server.yml`.
+2. Configure **Redis and persistent storage** in `config.yml` and make sure the server can connect to both.
 
 </Admonition>
 
@@ -59,4 +64,57 @@ For example, two survival servers could use `survival-1` and `survival-2`, while
 
 Once the server is in use, avoid changing this ID. A different ID is treated as a new server and may also affect synchronization of existing maps.
 
-Save the file and start the server again. Cross-server synchronization also requires working Redis and database connections in `config.yml`. See [Key Configuration Options](../advanced/configuration.mdx) for important synchronization settings and their tradeoffs.
+Save `server.yml`, then configure the database connections below.
+
+## Configuring Databases
+
+Sparrow Sync requires both **Redis** and **one persistent storage backend**. Redis handles cross-server communication, session locks, and snapshot caching. Persistent storage keeps player snapshots long-term. Both must be configured.
+
+Prepare these services, then open `plugins/SparrowSync/config.yml` and edit the existing `redis` and `database` sections. The examples below only cover connection settings; do not replace the entire file with them.
+
+### Redis
+
+```yaml title="config.yml · Redis"
+redis:
+  # Redis host, port, and database number.
+  url: 'redis://localhost:6379/0'
+  # Set a username for ACL authentication; otherwise this can be left empty.
+  username: ''
+  # Redis password. Leave empty if no password is configured.
+  password: ''
+```
+
+Replace `localhost` and the port with your Redis address. `/0` selects Redis database 0. Servers in the same synchronization group must connect to the same Redis database with the correct credentials.
+
+### Persistent Storage
+
+Choose a storage type with `database.type`, then fill in its corresponding connection section. Other sections can keep their default values.
+
+| Storage | `database.type` | Connection Section |
+| --- | --- | --- |
+| MySQL | `MYSQL` | `database.mysql` |
+| MariaDB | `MARIADB` | `database.mariadb` |
+| PostgreSQL | `POSTGRESQL` | `database.postgresql` |
+| MongoDB | `MONGODB` | `database.mongodb` |
+
+The following example uses MySQL. First create a database for snapshots, such as `minecraft`, and prepare an account with permission to create tables and read and write data in that database.
+
+```yaml title="config.yml · MySQL example"
+database:
+  # Choose the persistent storage backend.
+  type: MYSQL
+  mysql:
+    # Set the host, port, and database name, keeping the driver parameters you need.
+    url: 'jdbc:mysql://localhost:3306/minecraft?connectTimeout=5000&socketTimeout=10000&characterEncoding=UTF-8'
+    # Replace with your database account and password.
+    username: 'sparrow_sync'
+    password: 'your_database_password'
+    # Use the same table prefix across the synchronization group.
+    table-prefix: 'sparrow_sync_'
+```
+
+Servers in the same synchronization group should use the same storage type, connect to the same database, and use the same table prefix. For MongoDB, use the same `collection-prefix` instead. Each server must still have a different `server-id`.
+
+Once the server ID, Redis, and persistent storage are configured, save the files and start the server again. Check the console to confirm that both Redis and persistent storage connected successfully. If a connection fails, use the error message to check the address, credentials, and database permissions before restarting.
+
+See [Key Configuration Options](../advanced/configuration.mdx) for other important synchronization settings and their tradeoffs.

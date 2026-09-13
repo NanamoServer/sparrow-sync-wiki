@@ -6,15 +6,15 @@ sidebar_position: 1
 import PluginFileTree from '@site/src/components/PluginFileTree';
 import Admonition from '@theme/Admonition';
 
-本章将完成 Sparrow Sync 的安装，并为服务器配置唯一 ID。
+本章将完成 Sparrow Sync 的安装，并配置服务器唯一 ID、Redis 和持久化存储。
 
 ## 支持的服务端
 
-Sparrow Sync 支持以下 Paper 系服务端：
-
-**Paper 及其下游**：Paper、Purpur、Pufferfish、Leaf、Leaves、UniverseSpigot
-
-**Folia 及其下游**：Folia、Canvas、Luminol
+| 服务端 | 1.21.4 ~ 1.21.7 | 1.21.8 ~ 26.1.2 | 26.2 |
+| --- | :---: | :---: | :---: |
+| Paper **及其下游** | 🕒 未来支持 | ✅ | ✅ |
+| Folia **及其下游** | 🕒 未来支持 | ✅ | ✅ |
+| Spigot | ❌ 不支持 | ❌ 不支持 | 🕒 未来支持 |
 
 ## 安装
 
@@ -35,7 +35,12 @@ Sparrow Sync 支持以下 Paper 系服务端：
 
 <Admonition type="info" title="首次启动会自动关服">
 
-`server.yml` 中的 `server-id` 默认为空。首次启动时，插件会在控制台提示缺少服务器 ID，并主动关闭服务器。按照下一节填写 `server-id`，保存后重新启动即可。
+`server.yml` 中的 `server-id` 默认为空。首次启动时，插件会在控制台提示缺少服务器 ID，并主动关闭服务器。
+
+重新启动前，请完成下面两项配置：
+
+1. 在 `server.yml` 中填写本服唯一的 `server-id`。
+2. 在 `config.yml` 中配置 **Redis 和持久化存储**，并确保服务器能够连接到它们。
 
 </Admonition>
 
@@ -59,4 +64,57 @@ server-id: 'lobby'
 
 服务器投入使用后，尽量保持这个 ID 不变。更改 ID 会被当作一台新服务器，也可能影响已有地图的同步。
 
-保存文件后重新启动服务器。跨服同步还需要在 `config.yml` 中配置可连接的 Redis 和数据库，重要同步选项及其取舍见[关键配置说明](../advanced/configuration.mdx)。
+保存 `server.yml` 后，继续配置下面的数据库连接。
+
+## 配置数据库
+
+Sparrow Sync 需要同时连接 **Redis** 和**一种持久化存储**。Redis 用于跨服通信、会话锁和快照缓存；持久化存储用于长期保存玩家快照。两者都需要配置。
+
+先准备好相应服务，再打开 `plugins/SparrowSync/config.yml`，修改已有的 `redis` 和 `database` 分组。下面的代码只展示连接部分，不要用它替换整个文件。
+
+### Redis
+
+```yaml title="config.yml · Redis"
+redis:
+  # Redis 地址、端口和数据库编号。
+  url: 'redis://localhost:6379/0'
+  # 使用 ACL 用户认证时填写用户名，否则可留空。
+  username: ''
+  # Redis 密码，未设置密码时留空。
+  password: ''
+```
+
+将 `localhost` 和端口改为实际的 Redis 地址。`/0` 表示使用第 0 号 Redis 数据库；参与同一组同步的服务器需要连接到同一个 Redis 数据库，并填写正确的认证信息。
+
+### 持久化存储
+
+通过 `database.type` 选择存储类型，再填写对应分组的连接信息，其他分组可以保留默认值。
+
+| 存储 | `database.type` | 连接配置分组 |
+| --- | --- | --- |
+| MySQL | `MYSQL` | `database.mysql` |
+| MariaDB | `MARIADB` | `database.mariadb` |
+| PostgreSQL | `POSTGRESQL` | `database.postgresql` |
+| MongoDB | `MONGODB` | `database.mongodb` |
+
+下面以 MySQL 为例。先创建用于保存快照的数据库，例如 `minecraft`，并准备具有该数据库建表和读写权限的账号。
+
+```yaml title="config.yml · MySQL 示例"
+database:
+  # 选择持久化存储类型。
+  type: MYSQL
+  mysql:
+    # 修改主机、端口和数据库名称，保留需要的驱动参数。
+    url: 'jdbc:mysql://localhost:3306/minecraft?connectTimeout=5000&socketTimeout=10000&characterEncoding=UTF-8'
+    # 替换为实际的数据库账号和密码。
+    username: 'sparrow_sync'
+    password: 'your_database_password'
+    # 同一组同步服务器使用相同的数据表前缀。
+    table-prefix: 'sparrow_sync_'
+```
+
+参与同一组同步的服务器应使用相同的存储类型，连接到同一个数据库，并使用相同的数据表前缀；MongoDB 则使用相同的集合前缀 `collection-prefix`。每台服务器的 `server-id` 仍然需要不同。
+
+完成服务器 ID、Redis 和持久化存储配置后，保存文件并重新启动服务器。检查控制台，确认 Redis 和持久化存储连接成功；如果连接失败，请先根据报错检查地址、认证信息和数据库权限，再重新启动。
+
+其他重要同步选项及其取舍见[关键配置说明](../advanced/configuration.mdx)。
