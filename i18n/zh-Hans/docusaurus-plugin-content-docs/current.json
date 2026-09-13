@@ -1,12 +1,4 @@
 {
-  "sidebar.docs.category.getting-started": {
-    "message": "👋 快速开始",
-    "description": "The label for category '👋 Getting Started' in sidebar 'docs'"
-  },
-  "sidebar.docs.category.advanced": {
-    "message": "🚀 进阶教程",
-    "description": "The label for category '🚀 Advanced Tutorials' in sidebar 'docs'"
-  },
   "sidebar.docs.category.api": {
     "message": "🔌 开发接口",
     "description": "The label for category '🔌 Developer API' in sidebar 'docs'"
