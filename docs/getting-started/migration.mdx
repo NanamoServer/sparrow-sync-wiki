@@ -3,4 +3,46 @@ title: 🔄 Data Migration
 sidebar_position: 2
 ---
 
-*This page is still being written.*
+import Admonition from '@theme/Admonition';
+
+## Supported Plugins
+
+Sparrow Sync supports migrating player data from the following plugins:
+
+| Plugin | Supported Versions |
+| --- | --- |
+| InvSync | 2.0 and later |
+| HuskSync | 3.8.7 and later |
+
+## Starting a Migration
+
+Choose a server and follow the [Installation](./installation.mdx) guide to install and configure Sparrow Sync. **Keep the source plugin installed; do not uninstall it yet.** Make sure it is enabled and can read its existing data.
+
+<Admonition type="tip" title="Enable the whitelist during migration">
+
+We recommend enabling the whitelist before migration to keep other players from joining. If players continue playing during migration, their in-game data will continue to be saved as new snapshots, which may become their latest records instead of the migrated snapshots.
+
+</Admonition>
+
+Run the migration command in the **server console**, choosing `husksync` or `invsync` for your source plugin:
+
+```text
+/sparrow-sync data migrate [husksync/invsync]
+```
+
+Wait for the migration results to appear in the console. The plugin first reads the source plugin's data, then imports it into Sparrow Sync.
+
+Once migration is complete and you have verified the data, shut down the server and uninstall the original HuskSync or InvSync plugin. Then start the server again, lift the join restrictions, and allow players to connect.
+
+## Handling Migration Errors
+
+If any records fail to migrate, the console will show the number of skipped or failed records. Keep the files generated during this migration for troubleshooting:
+
+| Directory | Contents |
+| --- | --- |
+| `plugins/SparrowSync/snapshot/dump/` | A ZIP containing migration data exported and converted from the source plugin. Its filename starts with `sparrow-sync-migrate-`. |
+| `plugins/SparrowSync/snapshot/exception/migration/` | Diagnostic data, available raw player data, and error reports for players whose data failed to migrate. |
+
+Please **package the migration ZIP, the affected players' data, and the error reports together** and send them to the plugin author for investigation and a fix. Include the migration results from the console.
+
+If migration stops while reading the source plugin's data, a complete migration ZIP may not have been generated yet. In that case, provide any generated error files and the console errors.

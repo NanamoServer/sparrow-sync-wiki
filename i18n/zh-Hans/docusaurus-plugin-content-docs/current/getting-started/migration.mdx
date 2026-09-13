@@ -3,4 +3,46 @@ title: 🔄 数据迁移
 sidebar_position: 2
 ---
 
-*本文档编写中。*
+import Admonition from '@theme/Admonition';
+
+## 支持迁移的插件
+
+Sparrow Sync 支持从以下插件迁移玩家数据：
+
+| 插件 | 支持版本 |
+| --- | --- |
+| InvSync | 2.0 及以上 |
+| HuskSync | 3.8.7 及以上 |
+
+## 开始迁移
+
+选择一台服务器，按照[安装插件](./installation.mdx)一文安装并配置 Sparrow Sync。**保留需要迁移数据的原插件，不要卸载**，并确保它能够正常启用和读取原有数据。
+
+<Admonition type="tip" title="建议在迁移期间开启白名单">
+
+迁移前建议开启白名单，尽量避免其他玩家进入服务器。如果迁移期间仍有玩家游玩，该玩家在游戏中的数据会继续保存为最新快照，可能使迁移进来的快照不再是最新记录。
+
+</Admonition>
+
+在**服务器控制台**执行迁移命令，根据原插件选择 `husksync` 或 `invsync`：
+
+```text
+/sparrow-sync data migrate [husksync/invsync]
+```
+
+执行后，等待控制台输出迁移结果。插件会先读取原插件的数据，再将其导入 Sparrow Sync。
+
+迁移完成并确认数据无误后，关闭服务器，卸载原来的 HuskSync 或 InvSync 插件。随后重新启动服务器，解除进入限制，正常放行玩家。
+
+## 迁移异常处理
+
+如果部分档案迁移失败，控制台会显示跳过或失败的档案数量。请保留本次迁移生成的文件，以便排查原因：
+
+| 目录 | 内容 |
+| --- | --- |
+| `plugins/SparrowSync/snapshot/dump/` | 从原插件导出并转换的迁移数据 ZIP，文件名以 `sparrow-sync-migrate-` 开头。 |
+| `plugins/SparrowSync/snapshot/exception/migration/` | 迁移失败玩家的诊断数据、可导出的原始玩家数据及异常报告。 |
+
+请将**本次迁移的 ZIP、失败玩家的数据和异常报告一起打包**，反馈给插件作者分析和修复，并附上控制台的迁移结果。
+
+如果在读取原插件数据时迁移就已中断，可能尚未生成完整的迁移 ZIP。此时请提供已生成的异常文件和控制台报错。
