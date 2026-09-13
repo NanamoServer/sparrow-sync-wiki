@@ -1,10 +1,10 @@
 {
   "title": {
     "message": "Sparrow Sync",
-    "description": "导航栏中的标题"
+    "description": "The title in the navbar"
   },
   "item.label.GitHub": {
     "message": "GitHub",
-    "description": "导航栏中的 GitHub 链接"
+    "description": "Navbar item with label GitHub"
   }
 }

@@ -27,12 +27,11 @@ Inventories, ender chests, experience, health, hunger, potion effects, advanceme
 ## Key features
 
 - **🗄️ Flexible storage** — **MongoDB**, **MySQL** or **PostgreSQL** for persistence, with **Redis** handling cross-server coordination
-- **📦 Compressed snapshots** — player data stored with Sparrow NBT, in **Zstd**, Deflate or uncompressed form
+- **📦 Compressed snapshots** — player data stored with Sparrow NBT, in Zstd, Deflate or uncompressed form
 - **🖥️ Snapshot management GUI** — browse saved snapshots, inspect their contents, restore earlier data, pin records and export snapshots through an in-game menu
+- **🗺️ Map synchronization** — share map data between servers, with configurable sync modes and interaction controls
 - **🔧 Recovery tools** — inspect local exception archives and manage data with snapshot import, export and bulk archive commands
 - **🔄 Migration** — move existing data over from **HuskSync** or **InvSync** with a single command
-
-Wondering how Sparrow Sync keeps joins and quits stutter-free? Read [☄️ Exclusive Features](./feature) for the zero-blocking async pipeline, the login gate and the session lock.
 
 ## Quick start
 
