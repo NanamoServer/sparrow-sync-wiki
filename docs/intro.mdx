@@ -1,0 +1,52 @@
+---
+title: 📗 Introduction
+id: intro
+slug: /
+sidebar_position: 1
+---
+
+import ColoredLink from '@site/src/components/ColoredLink';
+import Highlight from '@site/src/components/Highlight';
+
+Hey there! Welcome to the Sparrow Sync docs! 🐦
+
+## What is Sparrow Sync
+
+Sparrow Sync is a **Paper and Folia plugin** for synchronizing **player data across Minecraft servers**. It coordinates player sessions through **Redis** and stores player data as persistent snapshots, so players keep their progress when they move between servers — and administrators can recover earlier saves at any time.
+
+:::info
+
+Sparrow Sync captures player state on the appropriate server thread (fully Folia-compatible), then encodes and stores snapshots asynchronously. Tasks for the same player are always processed in order, so a busy network never writes data out of sequence.
+
+:::
+
+## What can be synchronized
+
+Inventories, ender chests, experience, health, hunger, potion effects, advancements, statistics, attributes, location and more — every data type can be toggled individually in the configuration. Map data can also be shared between servers, with configurable synchronization modes and interaction controls.
+
+## Key features
+
+- **🗄️ Flexible storage** — **MongoDB**, **MySQL** or **PostgreSQL** for persistence, with **Redis** handling cross-server coordination
+- **📦 Compressed snapshots** — player data stored with Sparrow NBT, in **Zstd**, Deflate or uncompressed form
+- **🖥️ Snapshot management GUI** — browse saved snapshots, inspect their contents, restore earlier data, pin records and export snapshots through an in-game menu
+- **🔧 Recovery tools** — inspect local exception archives and manage data with snapshot import, export and bulk archive commands
+- **🔄 Migration** — move existing data over from **HuskSync** or **InvSync** with a single command
+
+Wondering how Sparrow Sync keeps joins and quits stutter-free? Read [☄️ Exclusive Features](./feature) for the zero-blocking async pipeline, the login gate and the session lock.
+
+## Quick start
+
+Install the plugin on every participating Paper or Folia server, point them at a shared Redis service and database, and give each server a unique `server-id` in `server.yml`.
+
+<Highlight color="#3CB371"><ColoredLink to="https://github.com/NanamoServer/sparrow-sync" color="#ffffff">**→ Full setup guide on GitHub**</ColoredLink></Highlight>
+
+:::tip
+
+The documentation is still being written. Until the configuration reference lands here, the [GitHub README](https://github.com/NanamoServer/sparrow-sync) covers installation, configuration files and commands.
+
+:::
+
+## Getting help
+
+- Found a bug or have a feature request? Open an issue on <Highlight color="#24292f"><ColoredLink to="https://github.com/NanamoServer/sparrow-sync/issues" color="#ffffff">**GitHub**</ColoredLink></Highlight>
+- The full source is available under the **GPL v3** license — contributions are welcome, translations included

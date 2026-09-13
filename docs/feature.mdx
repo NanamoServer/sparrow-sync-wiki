@@ -1,0 +1,44 @@
+---
+title: ☄️ Exclusive Features
+sidebar_position: 2
+---
+
+import UrlCard from '@site/src/components/UrlCard';
+
+## Zero-blocking join & quit
+
+Player data work is I/O-heavy: database queries, NBT encoding, compression. Sparrow Sync moves every one of those stages off the hot path — the server's tick threads and Netty's network threads never wait for a database.
+
+### Joining — data is ready before the player arrives
+
+1. **Connection configuration (async)** — the moment Paper hands the connection to the asynchronous configuration phase, the login gate takes it over. The player does not enter the world yet.
+2. **Parallel preload (async workers)** — the local vanilla player file and the latest remote snapshot are read in parallel, then merged into the final login data — all on async threads.
+3. **Gate release** — once both are ready, the gate lets the connection through. If loading fails or runs past the configured timeout, the login is refused with a logged reason instead.
+4. **Apply (the player's own thread)** — by the time `PlayerJoinEvent` fires, the data is already prepared in memory, so applying it is a short, pure in-memory operation on the player's thread. No I/O, no waiting.
+
+### Quitting — capture after vanilla, save in the background
+
+1. **`PlayerQuitEvent`** — the session is immediately closed to new save requests. Nothing heavy happens inside the event.
+2. **Next region tick (the player's thread)** — the snapshot is captured one tick later, strictly after vanilla finishes writing its own player file, so the captured state is complete.
+3. **Async serial pipeline** — encoding, compression and the database write all run asynchronously. Tasks for the same player are strictly ordered, and the session lock is only released after the final save completes.
+
+:::note
+
+Neither the tick threads nor the Netty I/O threads ever perform database I/O, encoding or network waits — only short in-memory operations run on the owning player's thread; everything else lives on async workers.
+
+:::
+
+## Login gate & session lock
+
+- **Login gate** — a player cannot finish logging in until their data is actually ready. When loading fails or times out, the connection is refused with a logged reason, rather than letting the player in with stale or empty data.
+- **Distributed session lock** — Redis coordinates which server owns a player's session, so the same account can never be actively synchronized from two servers at once.
+
+## More highlights
+
+- **🖥️ Snapshot management GUI** — browse saved snapshots, inspect their contents, restore earlier data, pin records and export snapshots in-game
+- **📦 Compressed snapshots** — Sparrow NBT with **Zstd**, Deflate or uncompressed storage formats
+- **🗺️ Map synchronization** — share map data between servers, with configurable sync modes and interaction controls
+- **🔧 Recovery tools** — local exception archives plus snapshot import, export and bulk archive commands
+- **🔄 Migration** — one command moves existing data over from **HuskSync** or **InvSync**
+
+<UrlCard url="https://github.com/NanamoServer/sparrow-sync" title="Sparrow Sync on GitHub" />
