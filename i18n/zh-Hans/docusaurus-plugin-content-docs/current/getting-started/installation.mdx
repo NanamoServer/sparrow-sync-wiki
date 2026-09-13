@@ -3,4 +3,60 @@ title: 📦 安装插件
 sidebar_position: 1
 ---
 
-*本文档编写中。*
+import PluginFileTree from '@site/src/components/PluginFileTree';
+import Admonition from '@theme/Admonition';
+
+本章将完成 Sparrow Sync 的安装，并为服务器配置唯一 ID。
+
+## 支持的服务端
+
+Sparrow Sync 支持以下 Paper 系服务端：
+
+**Paper 及其下游**：Paper、Purpur、Pufferfish、Leaf、Leaves、UniverseSpigot
+
+**Folia 及其下游**：Folia、Canvas、Luminol
+
+## 安装
+
+将 Sparrow Sync 的 `.jar` 文件放入服务器的 `plugins/` 文件夹，然后启动服务器。插件会在 `plugins/SparrowSync/` 中生成配置文件，主要文件和文件夹如下：
+
+<PluginFileTree
+  title="SparrowSync"
+  initialTreeData={[
+    { id: "libs", name: "libs", hoverText: "自动下载的运行时依赖，无需手动管理", children: [] },
+    { id: "translations", name: "translations", hoverText: "命令反馈、界面与日志的多语言文本", children: [] },
+    { id: "commands.yml", name: "commands.yml", isLeaf: true, hoverText: "命令的启用、权限与用法" },
+    { id: "config.yml", name: "config.yml", isLeaf: true, hoverText: "主配置：Redis、数据库连接与数据同步设置" },
+    { id: "server.yml", name: "server.yml", isLeaf: true, hoverText: "本服的唯一 ID，首次启动后需要手动填写" },
+  ]}
+/>
+
+<div style={{ marginBottom: "32px" }}></div>
+
+<Admonition type="info" title="首次启动会自动关服">
+
+`server.yml` 中的 `server-id` 默认为空。首次启动时，插件会在控制台提示缺少服务器 ID，并主动关闭服务器。按照下一节填写 `server-id`，保存后重新启动即可。
+
+</Admonition>
+
+## 配置 server.yml
+
+打开 `plugins/SparrowSync/server.yml`，将 `server-id` 的空字符串改为这台服务器的唯一 ID。以下以大厅服为例，将 ID 设置为 `lobby`。
+
+```yaml title="plugins/SparrowSync/server.yml"
+# 配置文件版本，请勿修改。
+___version___: '1'
+
+# 本服的唯一 ID，参与同步的每台服务器都要填不同的值。
+# 请在启动前填写，留空会导致服务器关闭。
+# 设置后尽量不要修改，改名会被当作一台新服务器，可能影响已有地图的同步。
+server-id: 'lobby'
+```
+
+`server-id` 是本服在同步集群中的唯一标识，必须填写，且不能与其他参与同步的服务器重复。
+
+例如，两台生存服可以分别使用 `survival-1` 和 `survival-2`，大厅服使用 `lobby`。将插件配置复制到另一台服务器后，记得为新服务器修改 `server-id`。
+
+服务器投入使用后，尽量保持这个 ID 不变。更改 ID 会被当作一台新服务器，也可能影响已有地图的同步。
+
+保存文件后重新启动服务器。跨服同步还需要在 `config.yml` 中配置可连接的 Redis 和数据库，相关设置见[配置文件](./configuration.mdx)。

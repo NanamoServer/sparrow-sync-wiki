@@ -3,4 +3,60 @@ title: 📦 Installation
 sidebar_position: 1
 ---
 
-*This page is still being written.*
+import PluginFileTree from '@site/src/components/PluginFileTree';
+import Admonition from '@theme/Admonition';
+
+This guide covers installing Sparrow Sync and assigning a unique ID to your server.
+
+## Supported Server Software
+
+Sparrow Sync supports the following Paper-based server software:
+
+**Paper and its forks**: Paper, Purpur, Pufferfish, Leaf, Leaves, UniverseSpigot
+
+**Folia and its forks**: Folia, Canvas, Luminol
+
+## Installation
+
+Place the Sparrow Sync `.jar` file in your server's `plugins/` folder, then start the server. The plugin generates its configuration files in `plugins/SparrowSync/`. The main files and folders are shown below:
+
+<PluginFileTree
+  title="SparrowSync"
+  initialTreeData={[
+    { id: "libs", name: "libs", hoverText: "Automatically downloaded runtime dependencies; no manual management needed", children: [] },
+    { id: "translations", name: "translations", hoverText: "Translations for command feedback, interfaces, and logs", children: [] },
+    { id: "commands.yml", name: "commands.yml", isLeaf: true, hoverText: "Command toggles, permissions, and usages" },
+    { id: "config.yml", name: "config.yml", isLeaf: true, hoverText: "Main configuration: Redis, database connections, and data synchronization" },
+    { id: "server.yml", name: "server.yml", isLeaf: true, hoverText: "This server's unique ID; set it manually after the first startup" },
+  ]}
+/>
+
+<div style={{ marginBottom: "32px" }}></div>
+
+<Admonition type="info" title="The server shuts down on the first startup">
+
+The `server-id` in `server.yml` is empty by default. On the first startup, the plugin reports the missing server ID in the console and shuts down the server. Set `server-id` as described in the next section, save the file, and start the server again.
+
+</Admonition>
+
+## Configuring server.yml
+
+Open `plugins/SparrowSync/server.yml` and replace the empty `server-id` string with a unique ID for this server. The following example uses `lobby` for a lobby server.
+
+```yaml title="plugins/SparrowSync/server.yml"
+# Configuration version. Do not edit.
+___version___: '1'
+
+# A unique ID for this server. Each server taking part in synchronization must use a different value.
+# Set this before startup. Leaving it blank shuts down the server.
+# Avoid changing it later. A new ID is treated as a new server and may affect synchronization of existing maps.
+server-id: 'lobby'
+```
+
+`server-id` identifies this server within the synchronization cluster. It is required and must be different from the IDs of all other participating servers.
+
+For example, two survival servers could use `survival-1` and `survival-2`, while a lobby server uses `lobby`. After copying the plugin configuration to another server, remember to change `server-id` for the new server.
+
+Once the server is in use, avoid changing this ID. A different ID is treated as a new server and may also affect synchronization of existing maps.
+
+Save the file and start the server again. Cross-server synchronization also requires working Redis and database connections in `config.yml`. See [Configuration](./configuration.mdx) for those settings.
