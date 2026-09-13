@@ -3,4 +3,46 @@ title: ❓ 常见问题
 sidebar_position: 7
 ---
 
-*本文档编写中。*
+import Admonition from '@theme/Admonition';
+
+## 如何在数据库之间迁移数据？
+
+如果想更换 Sparrow Sync 使用的数据库，可以先用 `dump_all` 导出数据，修改存储配置后，再用 `import_all` 导入。更换存储类型时也可以这样操作，例如从 MySQL 迁移到 PostgreSQL。
+
+<Admonition type="tip" title="迁移前建议开启白名单">
+
+建议为同一同步组的所有服务器开启白名单，并让在线玩家退出后再导出。白名单不会自动踢出已经在线的玩家。迁移完成前保持进入限制，避免玩家继续游玩产生新存档，使导出的数据落后于实际进度。
+
+</Admonition>
+
+### 1. 从原数据库导出
+
+先保留原来的数据库配置，选择一台连接原数据库的服务器，在控制台执行：
+
+```text
+/sparrow-sync data dump_all database-migration.zip
+```
+
+等待控制台提示导出完成。文件会保存在 `plugins/SparrowSync/snapshot/dump/database-migration.zip`，建议先复制一份留作备份，再进行下一步。
+
+### 2. 切换到新数据库
+
+关闭同一同步组的服务器，修改 `config.yml` 中的持久化存储类型和连接信息，使其指向新数据库。具体配置方式见[安装插件](./installation.mdx)。
+
+同一同步组的服务器都需要一起修改，使用相同的新数据库及表前缀或集合前缀，同时保留各自的 `server-id`。
+
+### 3. 向新数据库导入
+
+先启动一台已修改配置的服务器，保持白名单开启，并确认数据库连接成功。将导出的 ZIP 放入这台服务器的 `plugins/SparrowSync/snapshot/dump/` 目录，然后在控制台执行：
+
+```text
+/sparrow-sync data import_all database-migration.zip
+```
+
+等待控制台输出导入结果。同一同步组共用一个数据库，导入一次即可，不需要每台服务器重复执行。
+
+### 4. 检查数据并放行玩家
+
+导入成功后，检查玩家的快照列表，再使用测试账号登录，确认数据能够正常加载。确认无误后，启动其余已切换配置的服务器，解除限制并放行玩家。
+
+在完成检查之前，先保留原数据库和导出的 ZIP。如果控制台报告导入失败，请保持进入限制，先根据报错排查问题。

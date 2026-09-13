@@ -3,4 +3,46 @@ title: ❓ Frequently Asked Questions
 sidebar_position: 7
 ---
 
-*This page is still being written.*
+import Admonition from '@theme/Admonition';
+
+## How do I move data to another database?
+
+If you want to change the database Sparrow Sync uses, export your data with `dump_all`, switch the storage configuration, then import the archive with `import_all`. This also works when switching storage types, such as moving from MySQL to PostgreSQL.
+
+<Admonition type="tip" title="Enable the whitelist before migrating">
+
+Enable the whitelist on all servers in the synchronization group and have online players log out before exporting. A whitelist does not disconnect players who are already online. Keep player access restricted until migration is complete so new saves do not leave the exported data out of date.
+
+</Admonition>
+
+### 1. Export from the current database
+
+Keep the current database configuration in place. Choose one server connected to it and run this command in its console:
+
+```text
+/sparrow-sync data dump_all database-migration.zip
+```
+
+Wait for the console to confirm that the export completed. The archive is saved to `plugins/SparrowSync/snapshot/dump/database-migration.zip`. Keep a copy of it before proceeding.
+
+### 2. Switch to the new database
+
+Stop the servers in the synchronization group. Update the persistent storage type and connection settings in `config.yml` to point to the new database. See [Installing the Plugin](./installation.mdx) for database configuration details.
+
+Make the same change on every server in the group: they should all use the new database and matching table or collection prefixes, while keeping their individual `server-id` values.
+
+### 3. Import into the new database
+
+Start one server with the new configuration, keeping the whitelist enabled, and check that the database connection succeeds. Place the exported ZIP in that server's `plugins/SparrowSync/snapshot/dump/` directory, then run:
+
+```text
+/sparrow-sync data import_all database-migration.zip
+```
+
+Wait for the import result in the console. Import the archive once into the shared database; each server does not need its own import.
+
+### 4. Verify the data and reopen the servers
+
+After a successful import, check player snapshot lists and log in with a test account to verify that data loads correctly. Once everything looks right, start the remaining servers with the new configuration and lift the access restrictions.
+
+Keep the original database and exported ZIP until you have finished checking the migration. If the import reports failures, keep access restricted and investigate the console errors first.
