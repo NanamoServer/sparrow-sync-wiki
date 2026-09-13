@@ -1,0 +1,256 @@
+---
+title: ⚙️ Key Configuration Options
+sidebar_position: 4
+---
+
+import Admonition from '@theme/Admonition';
+
+Some options in `plugins/SparrowSync/config.yml` affect how data is retained across servers, how online rollbacks work, and when snapshots are saved. This page explains those options and the tradeoffs to consider before changing them.
+
+Each code block below is a relevant excerpt from the main configuration. Find the corresponding section in your existing file before making changes.
+
+---
+
+## 📦 Keeping or Discarding Unknown Data
+
+```yaml title="config.yml · Unknown data"
+synchronization:
+  # Discard these data types when this server does not recognize them.
+  # Unlisted types are kept. Restart the server after changing this.
+  discard-unknown-data:
+    - sparrow_sync:attributes
+    - sparrow_sync:enchantment_seed
+    - sparrow_sync:experience
+    - sparrow_sync:flight_status
+    - sparrow_sync:game_mode
+    - sparrow_sync:health
+    - sparrow_sync:hunger
+    - sparrow_sync:location
+```
+
+Servers do not always synchronize the same data. If a server disables a data type or does not have the plugin that provides it, Sparrow Sync treats the corresponding snapshot content as unknown data. By default, this data is retained in subsequent snapshots so it can be used again when the player returns to a server that recognizes it.
+
+<Admonition type="info" title="The discard list only applies to unknown types">
+
+Types listed in `discard-unknown-data` are discarded when this server cannot recognize them. If synchronization for a type is still enabled on this server, it continues to load and save normally. Adding it to this list does not disable synchronization.
+
+</Admonition>
+
+Whether to keep or discard data depends on whether it is still needed after the player leaves this server. Keep data that is temporarily unused but will be needed on the original server. Consider discarding data managed independently by each server or taken over by another plugin, so old records no longer travel with the player. Game mode and currency illustrate these two choices.
+
+### Why Game Mode Is Usually Discarded
+
+`sparrow_sync:game_mode` is included in the default discard list. For example, a survival server and a lobby may manage game modes independently, with game mode synchronization disabled in the lobby. Once the player enters the lobby, the survival server's mode does not need to remain in later snapshots. Discarding it prevents an old record from passing through other servers and eventually returning.
+
+To share game modes across servers, enable `synchronization.data-types.game-mode` on the relevant servers. The discard list only handles types that are not registered locally.
+
+### Currency Depends on Who Manages It
+
+Game modes can often be decided independently, but balances usually need to persist across servers. Even if a server does not use a balance, the player may still need it when returning to a server with an economy. For this reason, `sparrow_sync:vault` is not in the default discard list. The right choice depends on who manages the currency.
+
+| Situation | What to Do |
+| --- | --- |
+| The player is only passing through a server without an economy | **Keep the currency data** so the balance continues to travel with snapshots. |
+| Another plugin handles cross-server currency synchronization | **Disable Sparrow Sync's Vault synchronization** and add `sparrow_sync:vault` to the discard list to stop carrying the old balance. |
+
+In the second case, newly saved snapshots no longer carry the old currency data, preventing an outdated balance from being loaded if synchronization is enabled again later. Existing historical snapshots are not modified in bulk.
+
+---
+
+## ⚡ Loading Data Before the Player Joins
+
+```yaml title="config.yml · Early data loading"
+synchronization:
+  # Load player data early to reduce synchronization lag during login.
+  # Recommended. Try disabling the relevant option if compatibility issues occur.
+  native-async-apply:
+    # Basic player data
+    player-data: true
+    # Advancement progress
+    advancements: true
+    # Statistics
+    statistics: true
+```
+
+These options are enabled by default. Before the player has fully joined, Sparrow Sync takes over the server's data loading process, prepares the snapshot, and injects its data into that process. This reduces the lag caused by applying large amounts of data after the player enters the game.
+
+`player-data` controls basic player data, while `advancements` and `statistics` control advancement progress and statistics. Keep these enabled under normal circumstances; try disabling the relevant option if login or compatibility issues occur.
+
+<Admonition type="warning" title="Spawn event compatibility on Paper 1.21.7+">
+
+If another plugin handles spawn locations through the legacy `PlayerSpawnLocationEvent`, it causes the player object to be created early. Advancements and statistics may then fall back to synchronous loading during login, reducing the benefit of this optimization.
+
+Not every method of changing the spawn location triggers this behavior.
+
+</Admonition>
+
+---
+
+## ❤️ Why Online Rollbacks Skip Health by Default
+
+```yaml title="config.yml · Online rollback"
+synchronization:
+  # Skip these types when restoring snapshots to online players.
+  # Login synchronization is unaffected. An empty list restores all types.
+  skip-online-restore-data:
+    - sparrow_sync:health
+    - sparrow_sync:location
+```
+
+This list only affects restoring snapshots to online players, not login synchronization. By default, `sparrow_sync:health` and `sparrow_sync:location` are skipped so restoring inventory or other data does not also change the player's health and position.
+
+Rolling back health can also change whether a player is alive or dead. Sparrow Sync can write the corresponding health state, but **it does not deliberately fire a death event to restore a snapshot**. Death events cause other plugins to handle drops, penalties, graves, and more. No single event order works for every plugin during a rollback.
+
+| Event Order | Possible Problem |
+| --- | --- |
+| Fire the death event, then roll back | Other plugins process items that the rollback should have replaced. |
+| Roll back, then fire the death event | Newly restored items are taken or deducted by death handling, causing another loss. |
+
+<Admonition type="tip" title="Keep health in the skip list">
+
+We recommend skipping health during online rollbacks. Keep `sparrow_sync:health` in this list unless you have verified how the relevant plugins on your server behave.
+
+</Admonition>
+
+---
+
+## 🗺️ Before Enabling Map Handling
+
+```yaml title="config.yml · Map handling"
+synchronization:
+  map:
+    # Handle cross-server maps. Disabled by default. Restart after changing this.
+    # Enabling this changes map items; uninstalling may not fully restore them.
+    enabled: false
+    # SYNC: synchronize map content. HIDE: prevent use on other servers.
+    synchronization_mode: SYNC
+```
+
+Map handling is disabled by default. Sparrow Sync can handle map items that pass through its own save and cross-server loading process, but it cannot cover every way other plugins transfer items.
+
+A map item uses a numeric identifier, its map ID, to find the corresponding content. Vanilla normally allocates these IDs starting at `0`. Each server manages them independently, so the same ID can refer to entirely different maps on two servers.
+
+For example, a global market, cross-server auction house, or plugin backpack may send a map directly to another server, bypassing Sparrow Sync's save and loading process. Its original ID may point to a different map on the destination server, causing it to display the wrong content. Enabling map synchronization alone cannot make these transfers safe.
+
+<Admonition type="warning" title="Check how maps move between servers first">
+
+Before enabling this feature, identify the ways maps can move between your servers and make sure they pass through Sparrow Sync's synchronization process wherever possible. If you cannot ensure this, we recommend leaving map handling disabled.
+
+</Admonition>
+
+Once you understand how maps are transferred, decide what should happen after a transfer: should players continue viewing the original content, or should maps from other servers simply be prevented from displaying the wrong content? Sparrow Sync provides `SYNC` and `HIDE` for these two purposes.
+
+To store synchronized maps on the destination server without using vanilla's non-negative numbering range, `SYNC` allocates **map IDs below 0**. These negative IDs are local identifiers created by Sparrow Sync to link synchronized map items to their data files. `HIDE` does not store content from other servers, so it does not need these IDs.
+
+| Mode | Synchronizes Map Content | Allocates Negative IDs | Purpose |
+| --- | --- | --- | --- |
+| `SYNC` | Yes | Yes | Continue viewing maps after switching servers. |
+| `HIDE` | No | No | Prevent maps from other servers from displaying local map art. |
+
+### SYNC: Synchronize Map Content
+
+Set `synchronization.map.enabled` to `true` and use `synchronization.map.synchronization_mode: SYNC` to synchronize map content so players can still view it after switching servers.
+
+The plugin uses the negative IDs described above to create map data files and point map items to them. This substantially changes how map data is handled. Other plugins may assume map IDs are non-negative or manage map files themselves, so compatibility with every map-related plugin cannot be guaranteed. If you find a conflict, open an issue or contact the author so compatibility can be added.
+
+Enabling this feature changes map items and data. Uninstalling Sparrow Sync may not fully restore them. Understand these effects before enabling it.
+
+### HIDE: Prevent Cross-Server Map Use
+
+If you do not need to view map content across servers and only want to prevent maps from other servers from being misused, enable map handling and set the mode to `HIDE`. It makes maps unusable on other servers without allocating negative IDs or storing their content as `SYNC` does.
+
+This prevents ID collisions from making an external map display local map art that players could then steal or take away. It still depends on the map passing through Sparrow Sync and cannot cover direct trades that bypass the plugin.
+
+---
+
+## 🏆 Advancement Progress Across Servers
+
+```yaml title="config.yml · Unknown advancements"
+synchronization:
+  advancements:
+    # Keep advancements and progress not registered on this server.
+    # Disabling this may lose that progress. Disable only if all registries match.
+    keep-unknown-advancements: true
+```
+
+Enabled by default, this preserves advancements and progress that are not registered on the current server.
+
+For example, a survival server may add custom advancements through a data pack that is not installed in the lobby. Those advancements cannot be recognized while the player is in the lobby. Keeping unknown advancements lets the player retain that progress when returning to the survival server. Disabling it may lose that progress after the player passes through the lobby and their data is saved.
+
+<Admonition type="tip" title="When Can This Be Disabled?">
+
+Keeping unknown advancements requires an additional scan and data processing. If every participating server always has the same advancement registry, including custom data packs and their updates, you can disable this option to avoid that scanning overhead.
+
+</Admonition>
+
+---
+
+## ⏱️ Capturing Player Data During World Saves
+
+```yaml title="config.yml · World saves"
+synchronization:
+  save-triggers:
+    world-save:
+      # Save snapshots for players in a world when that world is saved.
+      enabled: true
+```
+
+Enabled by default, this saves snapshots for players in a world when the server saves that world. The usual default autosave interval is 6000 ticks, or about five minutes at 20 TPS. The actual interval depends on the server's autosave settings and performance.
+
+### Capture Happens in Two Steps
+
+A world save can trigger data capture for many players at once. Sparrow Sync handles it in this order:
+
+1. **The player's owning thread** captures data that must be read synchronously.
+2. **An asynchronous thread** captures the remaining data, then encodes and saves the snapshot.
+
+<Admonition type="warning" title="Fields May Reflect Different Moments">
+
+**Not every field in the snapshot necessarily comes from the same instant.** Players can still move, interact with items, or change other state during asynchronous capture. Some fields may therefore reflect different moments; the snapshot does not represent a completely frozen player state.
+
+</Admonition>
+
+### Why Use This Approach?
+
+We have substantially optimized capture overhead, but at extreme player counts such as 1000, reading all data on a single-threaded Paper server's main thread can still cause a noticeable MSPT spike. Splitting capture balances timely saves, thread requirements, and main-thread load.
+
+<Admonition type="info" title="A Rough Estimate for 1000 Players">
+
+Our rough estimate for a single-threaded Paper server with 1000 players puts the save-time latency spike at about **80 ms**, less than two ticks' worth of time at 20 TPS.
+
+This figure is only a reference. Actual overhead varies with hardware, player data size, and other plugins.
+
+</Admonition>
+
+Other synchronization plugins spread capture load in different ways. Some move all capture to asynchronous threads, facing the risk of data changing while it is read. Others delay saves player by player, so players farther down the queue are captured later as the player count grows. Splitting capture aims to keep the wait short while reducing concentrated work on the main thread.
+
+---
+
+## 📝 Why Keep Local Logs?
+
+```yaml title="config.yml · Local logs"
+logging:
+  # Save detailed synchronization logs, including entries not shown in the console.
+  # Keep this enabled. Restart the server after changing it.
+  local-file: true
+  # Days to retain logs. Defaults to two weeks; expired files are removed at startup.
+  retention-days: 14
+```
+
+Local logging is enabled by default, and we recommend keeping it enabled. Data loss and unexpected rollbacks are often intermittent. By the time an administrator receives a report, the player may have switched servers several times, making it difficult to reconstruct what happened.
+
+Local logs record:
+
+- **Synchronization conflicts** encountered during player synchronization.
+- **Lock transitions**, including acquiring and releasing distributed locks.
+- **Capture and save results**, tracing data from capture through persistence.
+
+Many details omitted from the console are still written to files, allowing you to follow a complete synchronization sequence by player and time.
+
+These logs can be verbose and take up disk space. When a data issue occurs, however, they are often essential to identifying where things went wrong. Missing records cannot be recovered later if logging was disabled.
+
+<Admonition type="tip" title="Control Disk Usage with the Retention Period">
+
+`logging.retention-days` defaults to `14`, keeping the last two weeks of logs. Adjust this value to suit your disk space and troubleshooting needs. At startup, the plugin removes `.log` and `.log.gz` files older than the retention period.
+
+</Admonition>
