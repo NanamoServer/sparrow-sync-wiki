@@ -3,4 +3,123 @@ title: 🧰 Exception Data Handling
 sidebar_position: 6
 ---
 
-*This page is still being written.*
+import Admonition from '@theme/Admonition';
+
+Exception snapshots are local archives left for administrators to inspect when saving, importing, or migrating data encounters a problem. An archive may contain complete player data, damaged raw content, or only diagnostic information. Check the cause before deciding what can be recovered.
+
+## 🔍 Viewing Exception Snapshots
+
+Run this command on the server where the problem occurred:
+
+```text
+/sparrow-sync exception list
+```
+
+It lists exception snapshots for **all players on this server**, with pagination. You can also filter by player or use a relative path from the list to inspect an archive:
+
+| Command | Purpose |
+| --- | --- |
+| `/sparrow-sync exception list [player] [page]` | List all exception snapshots, or filter by player. |
+| `/sparrow-sync exception view <file>` | Inspect an archive's identity information, snapshot body status, and readable data. |
+| `/sparrow-sync gui <player>` | Open a player's snapshot list, then switch to exception snapshots. |
+
+These commands require `sparrow_sync.command.view` by default. The `gui` command can only be run by a player. The GUI also reads local exception files; it cannot directly browse another server's exception directory. See [Permissions & Commands](./commands.mdx) for action permissions.
+
+<Admonition type="info" title="A listed record does not guarantee recoverable data">
+
+The list can show the player, time, and source from a separate header file, even if the snapshot body is damaged or was never created. When opening the details, check whether the body exists, whether it can be decoded, and which data remains readable.
+
+</Admonition>
+
+---
+
+## 📂 What Creates an Exception Archive?
+
+Archives are stored under `plugins/SparrowSync/snapshot/exception/` in four categories:
+
+| Subdirectory | What triggers it | What to check first |
+| --- | --- | --- |
+| `corrupted/` | A pending snapshot cannot be read or its overall format cannot be parsed during startup; a snapshot record cannot be decoded during bulk import. | Whether the file is complete or has been modified, and any read or format errors in the console. |
+| `malformed/` | Snapshot encoding fails or data violates storage constraints during saving; an individual data block fails validation, decompression, or NBT parsing during bulk import. | The affected data type, encoding error, or database constraint. |
+| `oversized/` | A snapshot exceeds a size limit in the plugin's storage layer or database, such as the database packet size limit. | The snapshot size, the size of each data type, and the database error. |
+| `migration/` | Reading, decoding, or converting a player's data from another plugin fails, or the converted snapshot cannot be encoded. | The source plugin, failure stage, and original exception in the error report. |
+
+### Normal Saves and Startup Retries
+
+During normal saving, data explicitly rejected by the storage layer goes into `malformed` or `oversized`, depending on the cause. For example, retrying unchanged data usually will not help if it cannot be encoded or already exceeds the storage size limit.
+
+When the database is temporarily unavailable, snapshots are saved to `plugins/SparrowSync/snapshot/pending/` for another attempt on the next startup. A successful database write removes the local pending files. Files that cannot be read or decoded move to `corrupted`; snapshots rejected by storage move to `malformed` or `oversized`. If the database remains unavailable, the remaining files stay in `pending`.
+
+### Bulk Imports and Plugin Migrations
+
+During `data import_all`, the plugin checks each snapshot's overall format and internal data blocks. If an individual record is faulty, it preserves the original record, writes an error report, and continues with the next record. If the database becomes unavailable or an exception archive cannot be written, the entire import stops. Use the console error to investigate.
+
+During `data migrate`, failures to read, convert, or encode source data go into `migration`. The report's `stage` field identifies the failing step: `read`, `decode/convert`, or `encode`. The generated migration ZIP then goes through bulk import, so it can also produce the other three categories. See [Data Migration](./migration.mdx) for the procedure.
+
+<Admonition type="warning" title="Some errors leave no complete archive">
+
+If a failure occurs before a complete snapshot exists, or local encoding or disk writes also fail, there may be no usable snapshot body. Problems such as an unreadable ZIP or a failure that stops reading from the source plugin altogether may not produce an archive for a specific player. Keep the console errors and local sync logs in these cases as well.
+
+</Admonition>
+
+---
+
+## 📦 What Does an Archive Contain?
+
+Files belonging to the same record share a filename prefix. Using `example.snapshot` as an example:
+
+| File | Contents and purpose |
+| --- | --- |
+| `example.snapshot` | The snapshot body. It may be a complete snapshot or damaged raw bytes preserved during bulk import. Reading it determines what is usable. |
+| `example.snapshot.head` | A separate binary header containing available player identity, snapshot ID, timestamp, save reason, source server, Minecraft data version, and data size summaries for the list view. It does not contain the full inventory data. |
+| `example.snapshot.error.txt` | An error report created for bulk import or migration failures. It includes the category, cause, and available player information. Migration reports also identify the source plugin and failure stage. A stack trace is included when the original exception is available. |
+| `example.snapshot.source` | Raw data from the source plugin, saved after a migration failure only when the original bytes are available. It remains in the source plugin's format and cannot be imported directly as a Sparrow Sync snapshot. |
+
+**Not every archive contains all these files.** Archives from normal saves and startup retries usually contain a body and `.head` file, without a separate `.error.txt`; consult the logs for the cause. If migration fails before conversion completes, there may only be a `.head`, an `.error.txt`, and an optional `.source`, with no `.snapshot` body.
+
+If a header is missing or damaged but the body still provides enough information, the plugin attempts to rebuild the header when reading the exception details. This repairs the information used by the list, not damaged player data.
+
+---
+
+## 🧰 Handling and Reporting Problems
+
+### Recover Readable Data First
+
+**If a snapshot is only partially damaged, you can still access its readable data through the GUI.** A decoding failure in one data type does not necessarily make the inventory, ender chest, or other contents unavailable.
+
+As a player on the server holding the archive, run:
+
+```text
+/sparrow-sync gui <player>
+```
+
+Switch to that player's exception snapshot list, open the record, and inspect the inventory, ender chest, and other views. If the item data is intact, you can take items directly from the interface. Check what the player actually lost and return those items promptly, without waiting for every problem in the snapshot to be fixed.
+
+<Admonition type="tip" title="Taking items requires editing permission">
+
+Opening the GUI requires `sparrow_sync.command.view`. Taking items also requires `sparrow_sync.ui.edit`. Unreadable data cannot be recovered this way; keep the original exception archive for further investigation.
+
+</Admonition>
+
+### Investigate and Report the Cause
+
+Keep the archive and review its details, error report, and logs from the same time. Address explicit database connection, account permission, disk space, or file access errors first. For `oversized`, compare the data size with the database limits. Unlike files in `pending`, exception archives are not automatically retried at startup.
+
+Consider opening an Issue or contacting the author when:
+
+- Data created during normal gameplay repeatedly fails encoding, decoding, validation, or conversion for an unclear reason.
+- Migration from a supported plugin version repeatedly fails for certain players, or reports incompatible interfaces or fields.
+- Snapshot sizes grow unexpectedly or ordinary player data hits a size limit, and you cannot identify the responsible data type.
+- Data has been lost, rolled back, or become inconsistent, requiring investigation with the archives and sync logs.
+- Even the local exception archive cannot be written, or an unexplained program exception occurs.
+
+When reporting, **package the record's body, header, error report, and raw attachment together**, retaining every file that exists. Also include:
+
+- The Sparrow Sync version, server type and version, and database type. For migration problems, include the source plugin version.
+- The time of the problem, player name or UUID, and the command or steps involved.
+- The complete console error and local sync logs for the affected player and time period.
+- For migration or bulk import problems, the ZIP used and the processing result shown in the console.
+
+Remove sensitive configuration values such as connection passwords before posting a public Issue. If player archives cannot be shared publicly, contact the author to arrange how to provide them.
+
+Once the problem is resolved and you have kept any backups you need, use `/sparrow-sync exception delete <file>` to clean up the record. This deletes the body and its associated header, raw attachment, and error report.
