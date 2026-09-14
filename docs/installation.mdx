@@ -88,14 +88,7 @@ Replace `localhost` and the port with your Redis address. `/0` selects Redis dat
 
 ### Persistent Storage
 
-Choose a storage type with `database.type`, then fill in its corresponding connection section. Other sections can keep their default values.
-
-| Storage | `database.type` | Connection Section |
-| --- | --- | --- |
-| MySQL | `MYSQL` | `database.mysql` |
-| MariaDB | `MARIADB` | `database.mariadb` |
-| PostgreSQL | `POSTGRESQL` | `database.postgresql` |
-| MongoDB | `MONGODB` | `database.mongodb` |
+Sparrow Sync supports MySQL, MariaDB, PostgreSQL, and MongoDB for persistent storage.
 
 The following example uses MySQL. First create a database for snapshots, such as `minecraft`, and prepare an account with permission to create tables and read and write data in that database.
 

@@ -88,14 +88,7 @@ redis:
 
 ### 持久化存储
 
-通过 `database.type` 选择存储类型，再填写对应分组的连接信息，其他分组可以保留默认值。
-
-| 存储 | `database.type` | 连接配置分组 |
-| --- | --- | --- |
-| MySQL | `MYSQL` | `database.mysql` |
-| MariaDB | `MARIADB` | `database.mariadb` |
-| PostgreSQL | `POSTGRESQL` | `database.postgresql` |
-| MongoDB | `MONGODB` | `database.mongodb` |
+Sparrow Sync 支持使用 MySQL、MariaDB、PostgreSQL 和 MongoDB 作为持久化存储。
 
 下面以 MySQL 为例。先创建用于保存快照的数据库，例如 `minecraft`，并准备具有该数据库建表和读写权限的账号。
 

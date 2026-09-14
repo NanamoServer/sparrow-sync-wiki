@@ -163,6 +163,41 @@ This prevents ID collisions from making an external map display local map art th
 
 ---
 
+### Map Ownership: What Happens After a World Reset?
+
+```yaml title="config.yml · Map ownership"
+synchronization:
+  map:
+    # Identify the map's origin using the server ID and its overworld UUID.
+    # Restart the server after changing this.
+    map-owner-id: '${server-id}-${world-uuid}'
+```
+
+`map-owner-id` determines whether a map belongs to the current server's world. `${server-id}` is the server ID from `server.yml`, and `${world-uuid}` is the UUID of the map's overworld. The default combines both, so a world reset that changes the UUID gives the new world a different map owner even when the server ID stays the same.
+
+In `SYNC` mode, this determines whether an old map brought back to the reset server continues updating as a local map or remains a map of the old world.
+
+**A resetting dungeon world: keep maps updating.** If your dungeon resets every round and its world UUID keeps changing, but you want players' maps to draw the current dungeon, remove `${world-uuid}` and use only the stable server ID:
+
+```yaml title="config.yml · Dungeon server example"
+synchronization:
+  map:
+    # Keep the same map owner across dungeon resets.
+    map-owner-id: '${server-id}'
+```
+
+As long as the server ID stays the same, the map owner remains unchanged across resets. Old maps can still be treated as local maps and continue updating as players explore the current dungeon.
+
+**A resetting resource world: preserve the old map image.** If players want to keep their completed maps of the old resource world, retain the default `${server-id}-${world-uuid}`. Once the new world has a different UUID, old maps are treated as coming from another owner. They retain their previously synchronized image, preventing terrain at the same coordinates in the new resource world from overwriting the old drawing.
+
+<Admonition type="info" title="Choose the ownership rule before putting the world into use">
+
+Changing this rule requires a server restart. Maps already tagged with the old owner will be treated as maps from another source. Choose the rule before opening the dungeon or resource world to players where possible, and keep each server's `server-id` unique when omitting the world UUID.
+
+</Admonition>
+
+---
+
 ## 🏆 Advancement Progress Across Servers
 
 ```yaml title="config.yml · Unknown advancements"
