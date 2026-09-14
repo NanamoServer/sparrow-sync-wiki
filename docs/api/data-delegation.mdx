@@ -3,4 +3,203 @@ title: 🤝 Data Delegation
 sidebar_position: 2
 ---
 
-*This page is still being written.*
+If your plugin manages player mana, class progression, or skill settings, you can include that data in Sparrow Sync snapshots for persistence, cross-server loading, and rollback. Your plugin continues to manage live player state; Sparrow Sync captures, stores, and restores it.
+
+This guide uses a Mana value as a complete example. After spending Mana on one survival server, a player can move to another server using the same synchronization storage and resume with the saved value.
+
+## How delegation works
+
+Implement `PlayerDataType<T>` for a category of business data, then register it once with Sparrow Sync. `T` is the Java value type shared by capture and decoding. The Mana example uses `Integer`.
+
+| Callback | Your plugin's responsibility |
+| --- | --- |
+| `key()` | Return a stable `DataKey` identifying the data type |
+| `capture(player, mode)` | Read the player's current value from your manager |
+| `encode(value)` | Convert the captured value into an NBT Tag |
+| `decode(data, mcDataVersion)` | Reconstruct the value from its NBT Tag |
+| `apply(player, value)` | Replace the player's current state with the restored value |
+
+## Implement the data type
+
+Assume your plugin already has a `ManaService` with `mana(player)` to read Mana and `mana(player, value)` to set it.
+
+The following `PlayerDataType<Integer>` connects these APIs to Sparrow Sync and stores the value as an NBT `IntTag`.
+
+```java
+package example.mana;
+
+import net.momirealms.sparrow.sync.libraries.nbt.IntTag;
+import net.momirealms.sparrow.sync.libraries.nbt.NBT;
+import net.momirealms.sparrow.sync.libraries.nbt.Tag;
+import net.momirealms.sparrow.sync.snapshot.data.CaptureMode;
+import net.momirealms.sparrow.sync.snapshot.data.DataKey;
+import net.momirealms.sparrow.sync.snapshot.data.PlayerDataType;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+
+import java.io.IOException;
+
+public final class ManaDataType implements PlayerDataType<Integer> {
+    public static final DataKey KEY = DataKey.of("mana_example", "mana");
+
+    private final ManaService manaService;
+
+    public ManaDataType(@NotNull ManaService manaService) {
+        this.manaService = manaService;
+    }
+
+    @Override
+    @NotNull
+    public DataKey key() {
+        return KEY;
+    }
+
+    @Override
+    public boolean critical() {
+        return true;
+    }
+
+    @Override
+    @NotNull
+    public Integer capture(@NotNull Player player, @NotNull CaptureMode mode) {
+        return this.manaService.mana(player);
+    }
+
+    @Override
+    @NotNull
+    public Tag encode(@NotNull Integer value) {
+        return NBT.createInt(value);
+    }
+
+    @Override
+    @NotNull
+    public Integer decode(@NotNull Tag data, int mcDataVersion) throws IOException {
+        if (!(data instanceof IntTag tag)) {
+            throw new IOException("Expected an IntTag for mana_example:mana");
+        }
+        int value = tag.getAsInt();
+        if (value < 0) {
+            throw new IOException("Stored Mana must not be negative");
+        }
+        return value;
+    }
+
+    @Override
+    public void apply(@NotNull Player player, @NotNull Integer value) {
+        this.manaService.mana(player, value);
+    }
+}
+```
+
+## Register the data type
+
+In your plugin's `onEnable()`, pass the existing Mana manager to the data type and register it.
+
+```java
+SparrowSync.instance().dataRegistry().register(new ManaDataType(manaService));
+```
+
+`mana_example:mana` combines a plugin namespace and a data name. Use your own namespace and register the same key on each server that synchronizes this data.
+
+Keep keys stable once they are in use; a renamed type does not automatically read data stored under the old key.
+
+The registry freezes during delayed initialization after startup, so register during your normal `onEnable()`.
+
+Each key can be registered only once. Duplicate registration or registration after freezing throws `IllegalStateException`. Registration is per data type, with no per-player registration needed.
+
+### Encoding and failure handling
+
+The `Integer` returned by `capture` is immutable. Later Mana spending cannot change an already captured value.
+
+`encode` and `decode` handle independent values and NBT only. Sparrow Sync creates the outer data key, index, and block; your plugin supplies the Tag representing the type's value.
+
+The example sets `critical()` to `true`, so a failure to capture, encode, decode, or apply Mana aborts the current save or synchronization operation.
+
+The default is `false`, allowing the failed type to be skipped while other data continues. Choose this according to whether players may enter the server if this data fails to restore.
+
+## Threads and cache lifetime
+
+Callbacks can execute on different threads. On Folia, the player's thread means the region thread that owns the player.
+
+| Callback | Execution and data requirements |
+| --- | --- |
+| `capture` with `SYNC` | Runs on the player's thread; return a captured value independent of subsequent business updates |
+| `capture` with `ASYNC` | Reads asynchronously while the player is online and may overlap with updates; only used for types opting into online asynchronous capture |
+| `capture` with `OFFLINE` | Runs in a serial task after logout; data must remain readable and must no longer be changing |
+| `encode`, `decode` | May run on any thread; work only with independent values and NBT |
+| `apply` | Runs on the player's thread and writes the restored value to the business manager |
+
+`supportsAsyncCapture()` defaults to `false`, which the example retains. This only controls online capture; `OFFLINE` capture after logout may still run asynchronously.
+
+Enable online asynchronous capture only when the data source permits concurrent reads.
+
+If `T` contains mutable lists, maps, or business objects, make an independent copy during online capture. A data type instance serves multiple players, so do not use instance fields to hold temporary results from a capture or decode call.
+
+### First login and restoration
+
+If there is no historical snapshot, or the snapshot has no `mana_example:mana` entry, Sparrow Sync does not call `decode` or `apply` for that type. A missing key leaves the current business value unchanged and does not trigger a critical type failure.
+
+Login application happens inside Sparrow Sync's `PlayerJoinEvent` handling. Avoid unconditionally resetting Mana in a later join handler, or letting an existing asynchronous database load overwrite the restored value.
+
+To refresh a display after restoration, listen for `SyncCompleteEvent` and use `event.applied().contains(ManaDataType.KEY)` to check whether Mana was actually applied.
+
+### Releasing data after logout
+
+After Quit, keep player data readable by `capture(..., OFFLINE)`.
+
+To release cached data, listen for `SnapshotSaveEvent` and register a callback on `event.completion()`. Clean up the corresponding session data once its logout save finishes.
+
+The event itself fires before storage submission; do not block inside the listener waiting for completion.
+
+## Data retention across servers
+
+Every server that uses Mana should install the business plugin, register the same DataKey, and use compatible NBT structures and the same synchronization storage.
+
+| Target server setup | Loading and subsequent saving |
+| --- | --- |
+| Registers `mana_example:mana` | Decodes and applies Mana, then captures the current local value on save |
+| Does not register the type, with default retention | Preserves the original data in subsequent snapshots; does not apply Mana locally |
+| Does not register the type and adds it to the discard list | Stops retaining it on load; new snapshots no longer carry Mana |
+
+For example, a lobby without a Mana system preserves this data by default, so the snapshot can still carry it when the player returns to survival.
+
+### Discard unknown data on a particular server
+
+To stop carrying Mana after a player passes through the lobby, register a discard rule in the lobby integration plugin's `onEnable()`.
+
+```java
+package example.lobby;
+
+import net.momirealms.sparrow.sync.plugin.SparrowSync;
+import net.momirealms.sparrow.sync.snapshot.data.DataKey;
+import org.bukkit.plugin.java.JavaPlugin;
+
+public final class LobbyPlugin extends JavaPlugin {
+    @Override
+    public void onEnable() {
+        SparrowSync.instance().dataRegistry().registerUnknownDrop(DataKey.of("mana_example", "mana"));
+    }
+}
+```
+
+The lobby registers only the discard rule, without registering `ManaDataType`. Call `registerUnknownDrop` before the registry freezes. The rule applies only to the current server.
+
+The discard list only affects types that are not registered locally. If the server registers `ManaDataType`, a discard rule for the same key does not prevent normal application.
+
+Administrators can configure the same list on the target server.
+
+```yaml
+synchronization:
+  discard-unknown-data:
+    - mana_example:mana
+```
+
+Discarding affects the loaded session and subsequent new snapshots; it does not rewrite stored historical snapshots. When a player returns to survival and loads a new snapshot without Mana, your plugin's missing-data behavior applies.
+
+## Type application order
+
+If Mana restoration requires class data to be applied first, override `dependencies()` and return the class data's `DataKey` in the set.
+
+This controls the application order of registered types. Unregistered dependencies are ignored; plugin loading dependencies still belong in the descriptor.
+
+For the location of type Tags within a snapshot, see [Data File Format](./data-file-format.mdx).

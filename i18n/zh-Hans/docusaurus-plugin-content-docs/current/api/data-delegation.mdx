@@ -3,4 +3,203 @@ title: 🤝 数据委托
 sidebar_position: 2
 ---
 
-*本文档编写中。*
+如果你的插件维护着玩家的魔力、职业进度或技能配置，可以将这些数据接入 Sparrow Sync，随玩家快照一起保存、跨服加载和回档。业务插件继续管理在线玩家的数值，Sparrow Sync 负责采集、存储和恢复。
+
+下面用一个 Mana 值演示完整接入。玩家在生存服消耗 Mana 后，切换到使用同一套同步存储的另一台服务器，可以继续使用保存的数值。
+
+## 委托存储如何工作
+
+为一类业务数据实现 `PlayerDataType<T>`，再向 Sparrow Sync 注册一次。`T` 是采集和解码共用的 Java 值类型，Mana 示例使用 `Integer`。
+
+| 回调 | 业务插件需要做什么 |
+| --- | --- |
+| `key()` | 返回固定的 `DataKey`，标识这类数据 |
+| `capture(player, mode)` | 从业务管理器读取玩家当前值 |
+| `encode(value)` | 将采集值转成 NBT Tag |
+| `decode(data, mcDataVersion)` | 从 NBT Tag 还原业务值 |
+| `apply(player, value)` | 用恢复的值覆盖玩家当前状态 |
+
+## 实现数据类型
+
+假设业务插件已有 `ManaService`，通过 `mana(player)` 读取 Mana，通过 `mana(player, value)` 设置 Mana。
+
+下面实现 `PlayerDataType<Integer>`，将这两个 API 接入 Sparrow Sync，并用 NBT `IntTag` 保存数值。
+
+```java
+package example.mana;
+
+import net.momirealms.sparrow.sync.libraries.nbt.IntTag;
+import net.momirealms.sparrow.sync.libraries.nbt.NBT;
+import net.momirealms.sparrow.sync.libraries.nbt.Tag;
+import net.momirealms.sparrow.sync.snapshot.data.CaptureMode;
+import net.momirealms.sparrow.sync.snapshot.data.DataKey;
+import net.momirealms.sparrow.sync.snapshot.data.PlayerDataType;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
+
+import java.io.IOException;
+
+public final class ManaDataType implements PlayerDataType<Integer> {
+    public static final DataKey KEY = DataKey.of("mana_example", "mana");
+
+    private final ManaService manaService;
+
+    public ManaDataType(@NotNull ManaService manaService) {
+        this.manaService = manaService;
+    }
+
+    @Override
+    @NotNull
+    public DataKey key() {
+        return KEY;
+    }
+
+    @Override
+    public boolean critical() {
+        return true;
+    }
+
+    @Override
+    @NotNull
+    public Integer capture(@NotNull Player player, @NotNull CaptureMode mode) {
+        return this.manaService.mana(player);
+    }
+
+    @Override
+    @NotNull
+    public Tag encode(@NotNull Integer value) {
+        return NBT.createInt(value);
+    }
+
+    @Override
+    @NotNull
+    public Integer decode(@NotNull Tag data, int mcDataVersion) throws IOException {
+        if (!(data instanceof IntTag tag)) {
+            throw new IOException("Expected an IntTag for mana_example:mana");
+        }
+        int value = tag.getAsInt();
+        if (value < 0) {
+            throw new IOException("Stored Mana must not be negative");
+        }
+        return value;
+    }
+
+    @Override
+    public void apply(@NotNull Player player, @NotNull Integer value) {
+        this.manaService.mana(player, value);
+    }
+}
+```
+
+## 注册数据类型
+
+在业务插件的 `onEnable()` 中，将已有的 Mana 管理器传给数据类型并注册。
+
+```java
+SparrowSync.instance().dataRegistry().register(new ManaDataType(manaService));
+```
+
+`mana_example:mana` 由插件命名空间和数据名称组成。请使用自己插件的命名空间，并让需要同步这项数据的服务器注册相同的 key。
+
+已投入使用的 key 应保持稳定，改名后的类型不会自动读取旧 key 下的数据。
+
+注册表会在启动后的延迟初始化阶段冻结，因此应在正常启动的 `onEnable()` 中完成注册。
+
+同一个 key 只能注册一次，重复注册或冻结后注册都会抛出 `IllegalStateException`。注册面向数据类型，无需为每位玩家注册。
+
+### 编解码与失败处理
+
+`capture` 返回的 `Integer` 是不可变值。玩家之后继续消耗 Mana，不会改变已经采集的结果。
+
+`encode`、`decode` 只处理独立数值与 NBT；Sparrow Sync 会生成外层数据标识、索引和数据块，插件只需提供类型值本身的 Tag。
+
+示例将 `critical()` 设为 `true`，Mana 采集、编码、解码或应用失败时会中止当前保存或同步流程。
+
+默认值是 `false`，允许跳过失败类型并继续处理其他数据。是否允许玩家在这类数据恢复失败后继续进入服务器，由业务需求决定。
+
+## 线程与缓存生命周期
+
+数据类型的回调可能在不同线程执行。下表中的玩家线程，在 Folia 上指该玩家所在的区域线程。
+
+| 回调 | 执行条件与数据要求 |
+| --- | --- |
+| `capture` 收到 `SYNC` | 在玩家线程读取，返回与后续业务修改脱离的采集结果 |
+| `capture` 收到 `ASYNC` | 在线异步读取，可能与玩家更新重叠；仅用于声明支持在线异步采集的类型 |
+| `capture` 收到 `OFFLINE` | 退出后在串行任务中采集，数据仍需可读，并已停止修改 |
+| `encode`、`decode` | 可在任意线程调用，只处理独立的值和 NBT |
+| `apply` | 在玩家线程调用，将数据写回业务管理器 |
+
+`supportsAsyncCapture()` 默认返回 `false`，示例保持这个默认值。它只控制在线采集，退出后的 `OFFLINE` 采集仍可能异步执行。
+
+只有数据源允许在线并发读取时，才应开启异步采集。
+
+如果 `T` 包含可变的列表、Map 或业务对象，在线采集时需要复制出独立结果。一个数据类型实例会服务多位玩家，不要用实例字段暂存某次采集或解码的中间结果。
+
+### 首次进入与数据恢复
+
+没有历史快照，或者快照中没有 `mana_example:mana` 时，Sparrow Sync 不会为这一项调用 `decode` 和 `apply`。缺少 key 时沿用业务插件的当前值，不会触发关键类型失败。
+
+登录时的数据应用发生在 Sparrow Sync 的 `PlayerJoinEvent` 处理中。业务插件不要在后续加入事件里无条件重置 Mana，也不要让原有数据库的异步加载覆盖刚恢复的值。
+
+需要在恢复后更新界面时，可以监听 `SyncCompleteEvent`，通过 `event.applied().contains(ManaDataType.KEY)` 判断本次是否实际应用了 Mana。
+
+### 退出后的数据释放
+
+Quit 后，需保证 `capture(..., OFFLINE)` 仍能读取玩家数据。
+
+如需释放缓存，监听 `SnapshotSaveEvent`，并通过 `event.completion()` 注册完成回调，在本次退出保存结束后清理对应会话的数据。
+
+事件本身在提交存储前触发，不要在监听器中阻塞等待完成结果。
+
+## 跨服中的数据保留
+
+需要使用 Mana 的服务器都应安装业务插件、注册相同的 DataKey，并使用兼容的 NBT 结构和同一套同步存储。
+
+| 目标服务器的接入情况 | 加载和后续保存的行为 |
+| --- | --- |
+| 注册了 `mana_example:mana` | 解码并应用 Mana，保存时采集本服当前值 |
+| 未注册该类型，保留默认设置 | 保留原始数据，后续快照继续携带；本服不应用 Mana |
+| 未注册该类型，且将它加入丢弃名单 | 加载时不再保留，之后保存的新快照不再携带 Mana |
+
+例如大厅服没有 Mana 系统，默认情况下，玩家经过大厅后回到生存服，快照仍会携带这项数据。
+
+### 指定某台服务器丢弃未知数据
+
+如果希望玩家经过大厅后不再携带 Mana，可以在大厅服接入插件的 `onEnable()` 中注册丢弃规则。
+
+```java
+package example.lobby;
+
+import net.momirealms.sparrow.sync.plugin.SparrowSync;
+import net.momirealms.sparrow.sync.snapshot.data.DataKey;
+import org.bukkit.plugin.java.JavaPlugin;
+
+public final class LobbyPlugin extends JavaPlugin {
+    @Override
+    public void onEnable() {
+        SparrowSync.instance().dataRegistry().registerUnknownDrop(DataKey.of("mana_example", "mana"));
+    }
+}
+```
+
+大厅服只注册丢弃规则，无需注册 `ManaDataType`。`registerUnknownDrop` 也必须在注册表冻结前调用，仅对当前服务器生效。
+
+丢弃名单只处理本服未注册的类型。如果本服已经注册 `ManaDataType`，同一个 key 的丢弃规则不会阻止它正常应用。
+
+管理员也可以在目标服务器配置相同的名单。
+
+```yaml
+synchronization:
+  discard-unknown-data:
+    - mana_example:mana
+```
+
+丢弃影响加载后的会话和后续新快照，已存储的历史快照不会被改写。玩家返回生存服后，如果加载的是不含 Mana 的新快照，就按业务插件的缺失数据规则处理。
+
+## 类型的应用顺序
+
+如果 Mana 恢复前需要先应用职业数据，可以覆写 `dependencies()`，返回职业数据的 `DataKey` 集合。
+
+它控制已注册类型的应用顺序，未注册的依赖会被忽略；插件加载依赖仍需在描述文件中声明。
+
+有关类型 Tag 在快照中的位置，见[数据文件格式](./data-file-format.mdx)。
