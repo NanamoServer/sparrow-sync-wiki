@@ -3,4 +3,101 @@ title: 🗂️ Data File Format
 sidebar_position: 3
 ---
 
-*This page is still being written.*
+import SnapshotFormat from '@site/src/components/SnapshotFormat';
+
+Sparrow Sync encodes each player data type as NBT and stores it in a separate block. An index lets readers locate a type without decoding the other blocks.
+
+There are two binary layouts, depending on the data source.
+
+| Data source | Binary layout | Contents |
+| --- | --- | --- |
+| Exported `.snapshot` files and Redis snapshot caches | Full binary snapshot | Snapshot header + Meta NBT + standalone data frame |
+| The database `data` field | Standalone data frame | Frame header + index NBT + data blocks |
+
+**The database `data` field stores the entire standalone data frame, starting with its `format` byte.** This uses the same layout as the `dataFrame` inside a full snapshot and can be read directly using the data frame structure below.
+
+## Encoding conventions
+
+Offsets start at `0`, and all lengths and offsets are in bytes. Each diagram measures offsets from the start of the snapshot, frame, or block it describes. Multi-byte integers use **big-endian** order. `u8`, `u16`, and `u32` are unsigned integers; `i32` is a signed integer.
+
+NBT uses unnamed root Tag encoding, written by `NBT.toBytes(tag, false)` in the project. Meta and index NBT are uncompressed compounds. Each data block records its own compression algorithm. CRC32 occupies 4 bytes and preserves all 32 bits.
+
+## Full binary snapshot
+
+A full snapshot contains a fixed 7-byte header, `M` bytes of Meta NBT, and a complete standalone data frame, in that order. The Meta segment is always present. The data frame starts at `7 + M`.
+
+<SnapshotFormat kind="snapshot" />
+
+### Meta NBT
+
+Meta is a separate compound with the following fields. Field order within the compound is unspecified; read values by name.
+
+| Key | NBT type | Contents |
+| --- | --- | --- |
+| `id` | IntArrayTag, 4 integers | Snapshot UUID |
+| `player` | IntArrayTag, 4 integers | Player UUID |
+| `ts` | LongTag | Time the save request was accepted, in milliseconds since the epoch |
+| `cause` | StringTag | Save reason enum name, such as `COMMAND` |
+| `pinned` | ByteTag | Exemption from automatic rotation, `0b` for false and `1b` for true |
+| `server` | StringTag | Source server identifier |
+| `mcData` | IntTag | Minecraft data version |
+
+The preceding snapshot header stores the Meta length and CRC32. The first byte of the data frame immediately follows the Meta segment.
+
+## Standalone data frame
+
+A data frame stores all data types. Its index locates the blocks in the contiguous block area that follows it. If the index NBT length is `I`, the block area starts `9 + I` bytes after the start of the frame.
+
+<SnapshotFormat kind="frame" />
+
+### Locating blocks through the index
+
+The index is a compound mapping each full `DataKey` to an IntTag. This example shows the index contents in SNBT.
+
+```text title="SNBT representation of the index NBT"
+{"demo:first": 0, "demo:second": 33}
+```
+
+Both `0` and `33` are relative to the **start of the block area**. The first block starts there, and the second starts 33 bytes later. The first block therefore occupies 33 bytes, comprising a 13-byte header and a 20-byte payload.
+
+```text title="Converting index offsets to byte positions"
+blockBase    = dataFrameStart + 9 + I
+blockStart   = blockBase + index[dataKey]
+payloadStart = blockStart + 13
+```
+
+When reading a full snapshot, `dataFrameStart = 7 + M`. When reading the database `data` byte array, `dataFrameStart = 0`.
+
+Sort index entries by offset. The next offset marks the end of the preceding block; the final block ends at the end of the frame. Key order within the compound does not determine physical block order. The index stores offsets only; lengths and compression algorithms live in the block headers.
+
+A `DataKey` uses the text form `namespace:value`. Built-in types use the `sparrow_sync` namespace. A frame with no type data still contains an empty compound index, followed by an empty block area.
+
+## Data blocks and payloads
+
+Each block belongs to one DataKey and contains its own 13-byte header and payload. Blocks within the same frame can use different compression algorithms.
+
+<SnapshotFormat kind="block" />
+
+| `compressorId` | Algorithm | Payload contents |
+| --- | --- | --- |
+| `0` | NONE | Uncompressed NBT bytes |
+| `1` | DEFLATE | zlib-wrapped DEFLATE bytes, as written by Java `DeflaterOutputStream` |
+| `2` | ZSTD | Zstandard-compressed bytes |
+
+Use the block's `compressorId` to decode its payload into `rawLength` bytes of NBT. CRC32 covers the stored payload, so for a compressed block, calculate it over the bytes before decompression.
+
+### Where the type value sits in NBT
+
+If a plugin provides `{count: 3}` as the Tag for `demo:first`, the block encoder wraps it with the full DataKey. The decompressed NBT has the following contents, shown here as SNBT.
+
+```text title="NBT decoded from the payload"
+{
+  "demo:first": {
+    count: 3
+  }
+}
+```
+
+The root compound contains exactly one entry for the current type. `rawLength` counts the binary bytes of the entire compound, including the outer `demo:first` key. The plugin's `PlayerDataType.encode` supplies the inner `{count: 3}` Tag, and `decode` receives that same inner structure.
+
+To extract a type, locate its block through the index, read the block header, decode the payload, then retrieve the type Tag from the root compound by its full DataKey. The corresponding plugin defines the internal structure of that Tag.
