@@ -3,4 +3,69 @@ title: 📘 Basic API Usage
 sidebar_position: 1
 ---
 
-*This page is still being written.*
+## Get the API instance
+
+```java
+SparrowSyncAPI api = SparrowSync.api();
+```
+
+The API accepts requests after Sparrow Sync finishes initialization and stops accepting them during shutdown. Calls before initialization finishes or during shutdown return a future completed exceptionally with `IllegalStateException`.
+
+For a player who has just joined, start API operations in `PlayerDataReadyEvent`. At that point, login data processing is finished and the session is ready for operations. New players without a historical snapshot also trigger this event.
+
+## Snapshot operations and remote requests
+
+Both `playerId` and `snapshotId` below are `UUID` values.
+
+| Call | Purpose |
+| --- | --- |
+| `api.save(playerId)` | Capture an online player's current data and save a new snapshot with cause `API` |
+| `api.restore(playerId, snapshotId)` | Restore that player's historical snapshot and save a new `RESTORE` record; for an offline player, make it available on their next login |
+| `api.latestSnapshot(playerId)` | Query the player's latest database snapshot |
+| `api.snapshot(snapshotId)` | Query a snapshot by ID |
+| `api.snapshots(playerId, offset, limit)` | Page through snapshot metadata, newest first; `offset` starts at 0 and `limit` must be positive |
+| `api.pin(snapshotId)` | Exempt a snapshot from automatic rotation |
+| `api.unpin(snapshotId)` | Make a snapshot eligible for subsequent rotation again |
+| `api.delete(snapshotId)` | Delete a snapshot and clear the player's login snapshot cache; pinned records can also be explicitly deleted |
+
+`save` and `restore` locate the player automatically. If the player is on another server, the request is forwarded there without specifying a target server.
+
+These methods return `CompletableFuture`. Continue through callbacks rather than blocking the main thread or a Folia region thread. Return to the player's owning thread if a callback needs to interact with the player.
+
+Treat queried snapshots and their NBT contents as read-only. Type data is parsed on demand when accessed.
+
+## Events
+
+Events fire on the server processing the player's data. Remote requests return results through the API future; listen on the executing server for the corresponding events.
+
+| Event | Meaning | Notes |
+| --- | --- | --- |
+| `PlayerDataReadyEvent` | Login data processing is finished and the session is ready | Fires once per successful login, including new players; their `snapshot()` is `null`. Does not fire for failed or aborted logins |
+| `PreApplyEvent` | Before online restoration writes player data | You can modify the current Bukkit application values in `decoded()`, using the corresponding data type's value type. This is not a login readiness notification |
+| `SyncCompleteEvent` | A source snapshot has been applied, during login loading or online restoration | `applied()` and `skipped()` list affected types. New players without history do not trigger it, and it does not confirm storage of the new restore record |
+| `SnapshotSaveEvent` | Encoding and map preparation are complete, before storage submission | Cancel saving with `setCancelled(true)`; obtain the final outcome through `completion()` |
+
+The first three events run on the player's thread. `SnapshotSaveEvent` runs on the asynchronous per-player serial thread.
+
+### SnapshotSaveEvent completion callback
+
+Register a callback on `completion()` to handle the outcome after the save request finishes, for example when arranging cache cleanup after logout. Do not block inside the listener waiting for this callback.
+
+```java
+@EventHandler
+public void onSnapshotSave(SnapshotSaveEvent event) {
+    event.completion().whenComplete((result, failure) -> {
+        if (failure != null) {
+            logger.log(Level.SEVERE, "Save request failed", failure);
+            return;
+        }
+        if (result instanceof SnapshotSaveResult.Settled settled) {
+            logger.info("Snapshot " + settled.id() + ", stored in database " + settled.result().stored());
+        }
+    });
+}
+```
+
+Here, `logger` is your plugin's logger. Completion means the request has a final outcome; use `settled.result().stored()` to determine whether it reached the database.
+
+When releasing player data, make sure the request is for the relevant logout save and clean up only that session's data.

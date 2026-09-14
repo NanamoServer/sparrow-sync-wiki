@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'Sparrow Sync',
 
-  favicon: 'img/favicon.ico',
+  favicon: 'img/sparrow-sync-logo.png',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -93,7 +93,7 @@ const config: Config = {
     navbar: {
       title: 'Sparrow Sync',
       logo: {
-        src: 'img/logo.svg',
+        src: 'img/sparrow-sync-logo.png',
         width: 32,
         height: 32,
       },

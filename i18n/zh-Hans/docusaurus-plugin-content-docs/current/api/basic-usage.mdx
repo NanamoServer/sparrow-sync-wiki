@@ -3,4 +3,69 @@ title: 📘 基础 API 使用
 sidebar_position: 1
 ---
 
-*本文档编写中。*
+## 获取 API 对象
+
+```java
+SparrowSyncAPI api = SparrowSync.api();
+```
+
+Sparrow Sync 完成启动初始化后，API 才开始接受请求；停服时停止接受请求。初始化完成前或停服期间调用，返回的 future 会以 `IllegalStateException` 异常完成。
+
+针对刚登录的玩家，可以在 `PlayerDataReadyEvent` 中发起 API 操作。事件触发时，登录数据已处理完成，玩家会话已可操作。没有历史快照的新玩家也会触发。
+
+## 操作快照与远程请求
+
+下表中的 `playerId` 和 `snapshotId` 均为 `UUID`。
+
+| 调用 | 用途 |
+| --- | --- |
+| `api.save(playerId)` | 采集在线玩家的当前数据，保存一份原因为 `API` 的新快照 |
+| `api.restore(playerId, snapshotId)` | 恢复该玩家的历史快照，并保存新的 `RESTORE` 记录；全网离线时供下次登录读取 |
+| `api.latestSnapshot(playerId)` | 查询数据库中该玩家最新的快照 |
+| `api.snapshot(snapshotId)` | 按 ID 查询快照 |
+| `api.snapshots(playerId, offset, limit)` | 从新到旧分页查询快照元数据，`offset` 从 0 开始，`limit` 大于 0 |
+| `api.pin(snapshotId)` | 固定快照，使其豁免自动轮转清理 |
+| `api.unpin(snapshotId)` | 取消固定，让快照重新参与后续轮转 |
+| `api.delete(snapshotId)` | 删除快照并清理该玩家的登录快照缓存，固定记录也可显式删除 |
+
+`save` 和 `restore` 会自动定位玩家。玩家在其他服务器时，请求会转发到所在服务器，无需单独指定目标服。
+
+这些方法返回 `CompletableFuture`。通过回调接续操作，不要在主线程或 Folia 区域线程上阻塞等待；回调中需要操作玩家时，应切回玩家所属线程。
+
+查询到的快照与 NBT 内容应只读使用，类型数据在访问时按需解析。
+
+## 事件列表
+
+事件在实际处理玩家数据的服务器派发。远程请求的结果通过 API future 返回，相关事件在执行服务器上监听。
+
+| 事件 | 含义 | 注意点 |
+| --- | --- | --- |
+| `PlayerDataReadyEvent` | 登录数据处理完成，会话已可操作 | 每次成功登录触发一次，包含新玩家；新玩家的 `snapshot()` 为 `null`，登录失败或中止时不触发 |
+| `PreApplyEvent` | 在线恢复写入玩家数据之前 | 可修改 `decoded()` 中本次通过 Bukkit 路径应用的数据，值须符合对应数据类型；不用于登录就绪通知 |
+| `SyncCompleteEvent` | 来源快照已成功应用，包含登录加载和在线恢复 | `applied()`、`skipped()` 列出应用与跳过的类型；无历史快照的新玩家不触发，也不表示新的恢复记录已入库 |
+| `SnapshotSaveEvent` | 快照编码与地图准备完成，尚未提交存储 | 可通过 `setCancelled(true)` 取消保存，通过 `completion()` 获取最终结果 |
+
+前三个事件在玩家线程派发，`SnapshotSaveEvent` 在异步的玩家串行线程派发。
+
+### SnapshotSaveEvent 的完成回调
+
+通过 `completion()` 注册回调，在保存请求结束后处理结果，例如安排退出后的缓存释放。不要在监听器中阻塞等待该回调。
+
+```java
+@EventHandler
+public void onSnapshotSave(SnapshotSaveEvent event) {
+    event.completion().whenComplete((result, failure) -> {
+        if (failure != null) {
+            logger.log(Level.SEVERE, "保存请求异常", failure);
+            return;
+        }
+        if (result instanceof SnapshotSaveResult.Settled settled) {
+            logger.info("快照 " + settled.id() + "，已入库 " + settled.result().stored());
+        }
+    });
+}
+```
+
+示例中的 `logger` 为业务插件的日志器。`completion()` 完成表示请求已有最终结果；是否已入库，需要通过 `settled.result().stored()` 判断。
+
+用于释放玩家数据时，应确认对应的是本次退出保存，并只清理对应会话的数据。
