@@ -70,6 +70,12 @@ server-id: 'lobby'
 
 Sparrow Sync 需要同时连接 **Redis** 和**一种持久化存储**。Redis 用于跨服通信、会话锁和快照缓存；持久化存储用于长期保存玩家快照。两者都需要配置。
 
+<Admonition type="warning" title="先确认服务版本">
+
+使用 Redis 时，Redis 版本必须大于 **7.2.4**；使用 MySQL 时，MySQL 版本必须大于 **8.0.0**。
+
+</Admonition>
+
 先准备好相应服务，再打开 `plugins/SparrowSync/config.yml`，修改已有的 `redis` 和 `database` 分组。下面的代码只展示连接部分，不要用它替换整个文件。
 
 ### Redis

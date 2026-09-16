@@ -70,6 +70,12 @@ Save `server.yml`, then configure the database connections below.
 
 Sparrow Sync requires both **Redis** and **one persistent storage backend**. Redis handles cross-server communication, session locks, and snapshot caching. Persistent storage keeps player snapshots long-term. Both must be configured.
 
+<Admonition type="warning" title="Check the service versions first">
+
+If you use Redis, its version must be greater than **7.2.4**. If you use MySQL, its version must be greater than **8.0.0**.
+
+</Admonition>
+
 Prepare these services, then open `plugins/SparrowSync/config.yml` and edit the existing `redis` and `database` sections. The examples below only cover connection settings; do not replace the entire file with them.
 
 ### Redis
