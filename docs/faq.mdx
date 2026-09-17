@@ -5,6 +5,48 @@ sidebar_position: 7
 
 import Admonition from '@theme/Admonition';
 
+## No other server uses the same server-id, so why does startup fail with a duplicate ID?
+
+```text
+server-id lobby is already in use by another online server; shutting down this server. Set a different server-id in server.yml for each server sharing the database
+```
+
+If you are sure no second server in the synchronization group uses that `server-id`, then in almost every case this server crashed earlier and its old process was never fully terminated, so it is still running in the background.
+
+At startup the plugin sends a probe addressed to that ID and waits 3 seconds: when nothing answers, the leftover identity is taken over; as soon as a process answers, it is treated as a conflict and the server shuts down. Answering probes and renewing the heartbeat never run on the Minecraft main thread, so a server whose main thread is already stuck and whose console has stopped scrolling, one that looks crashed to you, keeps answering for as long as the JVM process is alive.
+
+<Admonition type="warning" title="Do not work around this by changing server-id">
+
+A new ID does let the server start, but it joins the synchronization group under a brand new identity, session locks left over from the previous run do not move with it, and that tends to cause worse data problems. Check for the leftover process first.
+
+</Admonition>
+
+### 1. Check whether the old process is still running
+
+The heartbeat is renewed every 3 seconds and lives for 9 seconds. Query the remaining time a few times in a row: if it keeps jumping back to around 9000, a process really is renewing it in the background; `-2` means the key does not exist, so skip to the last section. The database index comes from the `/0` at the end of `redis.url` in `config.yml`:
+
+```text
+redis-cli -n 0 PTTL sparrow-sync:server:lobby
+```
+
+Then find the extra process with `ps -ef | grep java` (`jps -l` on Windows).
+
+<Admonition type="info" title="A free port does not mean the process has exited">
+
+During shutdown Minecraft disables plugins first, then releases the listening port, and only afterwards saves worlds and waits for the chunk system and I/O thread pools to finish. If that tail hangs, the process keeps running long after the port is free. Closing a screen or tmux window, or the terminal, does not necessarily end the JVM either.
+
+</Admonition>
+
+### 2. Terminate the leftover process and restart
+
+Use `kill <PID>` first to give it one chance to shut down properly, then check again after about 30 seconds. If the process is still there and the server log has produced no new output for a long time, force it with `kill -9 <PID>` (`taskkill /PID <PID> /F` on Windows) — note that forcing it gives the server no chance to save worlds and player data.
+
+Once the process is gone the heartbeat key expires on its own within 9 seconds, so wait fifteen seconds or so before starting the server. On a successful takeover the plugin writes a record to its log directory (`plugins/SparrowSync/logs/` by default) noting that the leftover identity was taken over.
+
+### Still failing after you confirmed there is no leftover process
+
+Then there really is a duplicate in the configuration. Check `plugins/SparrowSync/server.yml` on every server in the synchronization group and make sure no two of them share a `server-id`. The most common cause is copying a whole server directory and forgetting to change it.
+
 ## How do I move data to another database?
 
 If you want to change the database Sparrow Sync uses, export your data with `dump_all`, switch the storage configuration, then import the archive with `import_all`. This also works when switching storage types, such as moving from MySQL to PostgreSQL.
