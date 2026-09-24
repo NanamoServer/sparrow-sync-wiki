@@ -3,35 +3,73 @@ title: 📗 Introduction
 id: intro
 slug: /
 sidebar_position: 1
+description: Player data synchronization, cross-server maps, and snapshot management with Sparrow Sync.
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import ColoredLink from '@site/src/components/ColoredLink';
 import Highlight from '@site/src/components/Highlight';
 
-Hey there! Welcome to the Sparrow Sync docs! 🐦
+<div className="sync-intro-lede">
+  Sparrow Sync keeps player progress together across Minecraft servers. Inventories, experience, advancements, and other player data follow the player, while saved snapshots give administrators a way to inspect or restore an earlier state.
+</div>
 
-## What is Sparrow Sync
+<div className="sync-intro-links">
+  <a href="./installation">Get started →</a>
+  <a href="./configuration">Explore configuration →</a>
+</div>
 
-Sparrow Sync is a **Paper and Folia plugin** for synchronizing **player data across Minecraft servers**. It coordinates player sessions through **Redis** and stores player data as persistent snapshots, so players keep their progress when they move between servers — and administrators can recover earlier saves at any time.
+## What travels with the player
 
-:::info
+Choose which data types to share: inventories, ender chests, experience, health, hunger, potion effects, advancements, statistics, attributes, location, and more. Each type has its own configuration switch.
 
-Sparrow Sync captures player state on the appropriate server thread (fully Folia-compatible), then encodes and stores snapshots asynchronously. Tasks for the same player are always processed in order, so a busy network never writes data out of sequence.
+<div className="sync-intro-highlights">
+  <div>
+    <strong>🔄 Smooth transfers</strong>
+    <p>Most incoming data is prepared before the player joins, so they do not have to wait through a freeze after appearing in the world.</p>
+  </div>
+  <div>
+    <strong>📦 Saved snapshots</strong>
+    <p>Player data is stored as snapshots. Browse what was saved, inspect the contents, and restore an earlier record when needed.</p>
+  </div>
+  <div>
+    <strong>🗺️ Shared maps</strong>
+    <p>Map data can travel between servers too, with configurable synchronization modes and interaction controls.</p>
+  </div>
+</div>
 
-:::
+Sparrow Sync uses Redis to coordinate player sessions across servers. For persistent snapshots, choose MongoDB, MySQL, MariaDB, or PostgreSQL. Player state is captured on the appropriate server thread; encoding and storage happen asynchronously, and work for the same player stays in order.
 
-## What can be synchronized
+## See it in action
 
-Inventories, ender chests, experience, health, hunger, potion effects, advancements, statistics, attributes, location and more — every data type can be toggled individually in the configuration. Map data can also be shared between servers, with configurable synchronization modes and interaction controls.
+Click an animation to see the details.
 
-## Key features
+<div className="sync-intro-demos">
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/seamless-sync.avif')} alt="A player switches servers and enters the world without a post-join freeze" width="960" height="543" loading="lazy" />
+    <figcaption><strong>✨ Join without the pause</strong><span>Most of the incoming player state is ready before the join completes.</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/map-sync.avif')} alt="A map remains available after moving to another server" width="800" height="452" loading="lazy" />
+    <figcaption><strong>🗺️ Take maps across servers</strong><span>Share map content across the network when map synchronization is enabled.</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/snapshot-gui.avif')} alt="Browsing and managing player snapshots in the in-game menu" width="1289" height="729" loading="lazy" />
+    <figcaption><strong>🖥️ Manage snapshots in game</strong><span>Browse records, inspect their contents, restore, pin, or export them.</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/snapshot-text-panel.avif')} alt="Browsing player snapshots through the chat text panel" width="1289" height="729" loading="lazy" />
+    <figcaption><strong>💬 Work from the text panel</strong><span>View snapshot records and their actions in chat.</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo sync-intro-demo--wide">
+    <img src={useBaseUrl('/img/intro/detailed-logs.avif')} alt="Detailed log entries for login, data application, saving, and session locks" width="1289" height="729" loading="lazy" />
+    <figcaption><strong>🧾 Follow the sync process</strong><span>Dedicated logs show what happened during login, data application, saving, and session coordination.</span></figcaption>
+  </figure>
+</div>
 
-- **🗄️ Flexible storage** — **MongoDB**, **MySQL** or **PostgreSQL** for persistence, with **Redis** handling cross-server coordination
-- **📦 Compressed snapshots** — player data stored with Sparrow NBT, in Zstd, Deflate or uncompressed form
-- **🖥️ Snapshot management GUI** — browse saved snapshots, inspect their contents, restore earlier data, pin records and export snapshots through an in-game menu
-- **🗺️ Map synchronization** — share map data between servers, with configurable sync modes and interaction controls
-- **🔧 Recovery tools** — inspect local exception archives and manage data with snapshot import, export and bulk archive commands
-- **🔄 Migration** — move existing data over from **HuskSync** or **InvSync** with a single command
+## Tools for administrators
+
+Snapshots use Sparrow NBT and can be stored with Zstd or Deflate compression, or without compression. If something goes wrong, local exception archives and snapshot import, export, and bulk archive commands help you inspect and manage the data. You can also [migrate existing data](./migration) from HuskSync or InvSync with a command. See the [command reference](./commands) for the available tools.
 
 ## Getting help
 

@@ -3,35 +3,73 @@ title: 📗 介绍
 id: intro
 slug: /
 sidebar_position: 1
+description: 了解 Sparrow Sync 的跨服玩家数据同步、地图共享和快照管理功能。
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import ColoredLink from '@site/src/components/ColoredLink';
 import Highlight from '@site/src/components/Highlight';
 
-欢迎阅读 Sparrow Sync 文档！🐦
+<div className="sync-intro-lede">
+  Sparrow Sync 让玩家在不同 Minecraft 服务器之间切换时，仍能接着之前的进度游玩。背包、经验、进度等数据随玩家一起转移；管理员也能查看历史快照，在需要时恢复早先保存的状态。
+</div>
 
-## 什么是 Sparrow Sync
+<div className="sync-intro-links">
+  <a href="./installation">开始安装 →</a>
+  <a href="./configuration">查看配置 →</a>
+</div>
 
-Sparrow Sync 是一款用于**跨服务器同步玩家数据**的 **Paper / Folia 插件**。它通过 **Redis** 协调玩家会话，并将玩家数据保存为持久化快照——玩家在不同服务器之间切换时进度不丢失，管理员也可以随时恢复历史存档。
+## 玩家可以带走哪些数据
 
-:::info
+背包、末影箱、经验、生命值、饥饿值、药水效果、进度、统计、属性、位置等都可以同步。每种数据类型都能在配置中单独开关。
 
-Sparrow Sync 在对应的服务器线程上采集玩家状态（完全兼容 Folia），再异步编码并保存快照。同一玩家的任务始终按顺序处理，网络波动也不会导致数据乱序写入。
+<div className="sync-intro-highlights">
+  <div>
+    <strong>🔄 顺畅跨服</strong>
+    <p>大部分数据在玩家进入世界前就已准备好，不用进服后站在原地等数据加载。</p>
+  </div>
+  <div>
+    <strong>📦 历史快照</strong>
+    <p>玩家数据会保存为快照。可以浏览记录、查看内容，也可以按需恢复早先的数据。</p>
+  </div>
+  <div>
+    <strong>🗺️ 地图共享</strong>
+    <p>地图数据也能在服务器之间流转，同步模式和地图交互限制均可配置。</p>
+  </div>
+</div>
 
-:::
+Sparrow Sync 使用 Redis 协调跨服玩家会话，持久化快照可存储在 MongoDB、MySQL、MariaDB 或 PostgreSQL 中。玩家状态在对应的服务器线程上采集，后续编码与存储异步进行；同一玩家的任务按顺序处理。
 
-## 可以同步哪些数据
+## 看看实际效果
 
-背包、末影箱、经验、生命值、饥饿值、药水效果、进度、统计、属性、位置等——每种数据类型都可以在配置中单独开关。地图数据也可以在服务器之间共享，同步模式与交互限制均可配置。
+点击动图可以放大查看。
 
-## 核心功能
+<div className="sync-intro-demos">
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/seamless-sync.avif')} alt="玩家切换服务器后进入世界，没有进服后的等待卡顿" width="960" height="543" loading="lazy" />
+    <figcaption><strong>✨ 进服后无需等待</strong><span>大部分玩家数据会在进入世界前准备好。</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/map-sync.avif')} alt="玩家切换服务器后仍能看到同步的地图" width="800" height="452" loading="lazy" />
+    <figcaption><strong>🗺️ 地图跟着玩家走</strong><span>启用地图同步后，地图内容可以在服务器之间共享。</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/snapshot-gui.avif')} alt="在游戏菜单中浏览和管理玩家快照" width="1289" height="729" loading="lazy" />
+    <figcaption><strong>🖥️ 游戏内管理快照</strong><span>浏览、查看、恢复、固定或导出历史记录。</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo">
+    <img src={useBaseUrl('/img/intro/snapshot-text-panel.avif')} alt="通过聊天文本面板浏览玩家快照" width="1289" height="729" loading="lazy" />
+    <figcaption><strong>💬 文本面板也能操作</strong><span>在聊天栏里查看快照记录和对应操作。</span></figcaption>
+  </figure>
+  <figure className="sync-intro-demo sync-intro-demo--wide">
+    <img src={useBaseUrl('/img/intro/detailed-logs.avif')} alt="记录登录、数据应用、保存和会话锁的详细日志" width="1289" height="729" loading="lazy" />
+    <figcaption><strong>🧾 看清同步过程</strong><span>独立的详细日志记录登录、数据应用、保存与会话协调过程。</span></figcaption>
+  </figure>
+</div>
 
-- **🗄️ 多种存储后端**——**MongoDB**、**MySQL** 或 **PostgreSQL** 持久化数据，**Redis** 协调跨服操作
-- **📦 快照压缩**——使用 Sparrow NBT 保存玩家数据，支持 Zstd、Deflate 和不压缩三种格式
-- **🖥️ 快照管理菜单**——在游戏内浏览快照、查看内容、恢复历史数据、固定记录和导出快照
-- **🗺️ 地图同步**——在服务器之间共享地图数据，同步模式与交互限制均可配置
-- **🔧 数据恢复工具**——查看本地异常档案，通过快照导入、导出和批量归档命令管理数据
-- **🔄 数据迁移**——一条命令即可从 **HuskSync** 或 **InvSync** 迁移现有数据
+## 给管理员准备的工具
+
+快照使用 Sparrow NBT 保存，可选择 Zstd、Deflate 或不压缩。遇到问题时，可以查看本地异常档案，也可以通过快照导入、导出和批量归档命令处理数据。已有 HuskSync 或 InvSync 数据的服务器，可以用命令[迁移现有数据](./migration)。具体用法见[命令文档](./commands)。
 
 ## 获取帮助
 
